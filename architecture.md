@@ -115,32 +115,57 @@ scaffolding-operator/
 
 ---
 
-### Skill 2: `designing-operator-api`
-**Purpose**: CRD schema design from natural language descriptions  
+### Skill 2: `designing-operator-api` (BUILT & VALIDATED)
+**Purpose**: CRD schema design, validation, webhooks, and API versioning  
 **Maps to**: API Definition (70% boilerplate / 30% creative) + CRD Generation (100% boilerplate)  
-**Trigger**: "define api", "design crd", "define types", "add fields", "add status conditions"
+**Trigger**: "define api", "design crd", "define types", "add fields", "add status conditions", "add webhooks", "add API version"  
+**Status**: Sprint 2 complete. Validated against `operator-sdk` — types, markers, and webhook config all match.
+
+**Four workflows:**
+- **Workflow A**: Design new CRD types from natural language requirements — generates types.go with Spec, Status, markers, conditions, print columns
+- **Workflow B**: Add/modify fields on existing CRD — reads existing types, adds fields with proper markers, updates DeepCopy
+- **Workflow C**: Add webhooks (Pattern H) — generates webhook handler (Default + ValidateCreate/Update/Delete), 9 config files, updates main.go
+- **Workflow D**: Add API version (Pattern G) — creates new version directory with storageversion marker, supports conversion webhooks
 
 ```
 designing-operator-api/
-├── SKILL.md                          # Decision tree: "What does your operator manage?"
+├── SKILL.md                              # 4 workflows (types, modify, webhooks, versioning)
 ├── references/
-│   ├── type-design-patterns.md      # Spec/Status patterns, optional fields, embedded types
-│   ├── validation-markers.md        # All kubebuilder markers with examples
-│   ├── cel-validation-rules.md      # CEL expressions (2025+ best practice)
-│   ├── status-conventions.md        # Condition types, phase enums, subresource patterns
-│   └── api-versioning.md            # v1alpha1 → v1 progression, conversion webhooks
+│   ├── type-design-patterns.md          # Spec/Status patterns, nested types, optional fields
+│   ├── validation-markers.md            # All kubebuilder markers with examples
+│   ├── cel-validation-rules.md          # CEL cross-field validation (2025+)
+│   ├── status-conventions.md            # Conditions, phase enums, subresource patterns
+│   ├── api-versioning.md               # v1alpha1→v1 progression, storageversion, hub-and-spoke
+│   ├── webhook-patterns.md             # Defaulting, validating, conversion webhooks
+│   └── cluster-scoped-patterns.md      # Cluster vs namespace design considerations
 ├── scripts/
-│   └── validate-api-types.py        # Checks for missing json tags, missing markers
+│   └── validate-api-types.py           # 14 checks: json tags, markers, conditions, imports
 └── assets/
     ├── templates/
-    │   └── types.go.tmpl            # Parameterized Spec/Status with all markers
+    │   ├── types.go.tmpl               # Parameterized Spec/Status with markers
+    │   ├── webhook.go.tmpl             # Defaulting + validating webhook handler
+    │   └── config/                     # 9 webhook config templates (flat naming)
+    │       ├── webhook-service.yaml.tmpl
+    │       ├── webhook-kustomization.yaml.tmpl
+    │       ├── webhook-kustomizeconfig.yaml.tmpl
+    │       ├── certmanager-certificate.yaml.tmpl
+    │       ├── certmanager-kustomization.yaml.tmpl
+    │       ├── certmanager-kustomizeconfig.yaml.tmpl
+    │       ├── manager-webhook-patch.yaml.tmpl
+    │       ├── webhookcainjection-patch.yaml.tmpl
+    │       └── crd-webhook-patch.yaml.tmpl
     └── examples/
-        ├── simple-spec.go           # Level 1: minimal spec (3 fields)
-        ├── complex-spec.go          # Level 3+: nested types, storage specs
-        └── status-conditions.go     # Standard condition patterns
+        ├── simple-spec.go              # Level 1: minimal spec (3 fields)
+        ├── complex-spec.go             # Level 3+: nested types, storage, resources, backup
+        ├── status-conditions.go        # Conditions with Available/Progressing/Degraded
+        └── webhook-validation.go       # Real webhook with Default() + cross-field validation
 ```
 
-**What it eliminates**: Trial-and-error with kubebuilder marker syntax, missing json tags, incorrect validation rules. The agent walks the developer through API design as a conversation: "What fields does your resource need? What should be validated? What status does the user need to see?"
+**24 files total** (1 SKILL.md, 7 references, 1 script, 11 templates, 4 examples).
+
+**What it eliminates**: Trial-and-error with kubebuilder marker syntax, missing json tags, incorrect validation rules, webhook config boilerplate. The agent walks the developer through API design as a conversation and generates production-ready types with proper validation, conditions, print columns, and optional webhooks.
+
+**Validated against operator-sdk**: Types match structurally (root markers, subresource), skill adds 9+ validation markers vs SDK's 0, 4+ print columns vs 0, conditions vs none, real webhook logic vs empty stubs. See `tests/designing-operator-api/gap_analysis.md`.
 
 ---
 
@@ -421,11 +446,11 @@ No new skills needed for higher levels — just deeper reference documents and m
 │   │   ├── scripts/      (1 validator, 48 checks)
 │   │   └── assets/templates/  (25 templates — 9 top-level + 16 config)
 │   │
-│   ├── designing-operator-api/
+│   ├── designing-operator-api/        ← BUILT & VALIDATED (Sprint 2)
 │   │   ├── SKILL.md
-│   │   ├── references/   (5 docs)
-│   │   ├── scripts/      (1 validator)
-│   │   └── assets/       (1 template + 3 examples)
+│   │   ├── references/   (7 docs)
+│   │   ├── scripts/      (1 validator, 14 checks)
+│   │   └── assets/       (11 templates + 4 examples)
 │   │
 │   ├── implementing-reconciliation/
 │   │   ├── SKILL.md
@@ -452,7 +477,7 @@ No new skills needed for higher levels — just deeper reference documents and m
 ```
 
 **Planned totals**: 5 skills, 25 reference docs, 9 scripts, 20+ templates, 8 examples, 3 subagents.
-**Actual (Sprint 1)**: 1 skill built with 29 files (originally planned 11, expanded to 29 after operator-sdk gap analysis).
+**Actual (Sprints 1-2)**: 2 skills built with 53 files total (29 scaffolding + 24 API design).
 
 ---
 
@@ -461,7 +486,7 @@ No new skills needed for higher levels — just deeper reference documents and m
 | Component | Sprint | Status | Files | Notes |
 |-----------|--------|--------|-------|-------|
 | `scaffolding-operator` | 1 | **DONE** | 29 | Validated against operator-sdk v1.37.0. 4 patterns tested: A (new project), B (same-group), D (cluster-scoped), C (different-group). 48-check validation script. |
-| `designing-operator-api` | 2 | Pending | — | |
+| `designing-operator-api` | 2 | **DONE** | 24 | 4 workflows (types, modify, webhooks, versioning). 7 references, 1 script, 2 templates + 9 config templates, 4 examples. Validated against SDK. |
 | `implementing-reconciliation` | 3 | Pending | — | |
 | `testing-operator` | 4 | Pending | — | |
 | `bundling-operator` | 5 | Pending | — | |
@@ -479,6 +504,14 @@ No new skills needed for higher levels — just deeper reference documents and m
 6. **Cluster-scoped resources are a flag, not a separate workflow.** Only two differences from namespaced: `//+kubebuilder:resource:scope=Cluster` marker on root type, and `namespaced: true` omitted from PROJECT. Everything else (controller, RBAC, config) is identical.
 7. **Pluralization follows Kubernetes conventions, not simple `+s`.** Kinds ending in `s` keep the same plural (`redis` → `redis`), `y` after consonant becomes `ies` (`policy` → `policies`). SKILL.md documents this with user override via `--plural`.
 8. **Test ordering matters for SDK comparison.** All same-group APIs (namespaced + cluster-scoped) must be created before `operator-sdk edit --multigroup`. Reversing this triggers an SDK bug (duplicate import aliases).
+
+### Sprint 2 Lessons Learned
+
+1. **Types skill is fundamentally different from scaffolding.** The SDK generates stubs (empty Spec with `Foo` field). The skill generates production-ready types from user requirements — validation markers, conditions, print columns, nested types. The comparison is structural (root markers, package layout) not content.
+2. **Webhook creation order matters.** Webhooks must be created BEFORE `operator-sdk edit --multigroup`. The SDK fails with a path mismatch error if webhooks are added after multigroup is enabled on a pre-existing API.
+3. **DeepCopy gets complex with nested types.** StorageSpec with `*string`, BackupSpec as `*BackupSpec` pointer, `corev1.ResourceRequirements` — each needs specific DeepCopy handling. Slices of conditions need element-wise deep copy.
+4. **API versioning is a type concern, not a scaffolding concern.** Creating `api/v1beta1/` with `+kubebuilder:storageversion` and registering the new scheme in main.go belongs in the API design skill, not scaffolding.
+5. **Webhook config is 9 files.** More than expected — webhook service, kustomization, kustomizeconfig, certmanager certificate, certmanager kustomization, certmanager kustomizeconfig, manager webhook patch, CA injection patch, CRD webhook patch. Templates prevent manual errors.
 
 ---
 

@@ -63,125 +63,23 @@ See `tests/scaffolding-operator/gap_analysis.md` for detailed comparison against
 
 ## Sprint 2: `designing-operator-api`
 
-### Patterns Covered (from scaffolding research)
+### Patterns Covered
 
-In addition to the core CRD design workflows, Sprint 2 covers these scaffolding-adjacent patterns that relate to API design:
-
-| Pattern | Description |
-|---------|-------------|
-| E | Resource-only (no controller) — define a CRD type consumed by another controller |
-| F | Controller-only for external types — watch core K8s types without defining a CRD |
-| G | Multiple API versions (v1alpha1 → v1beta1) — version progression with `+kubebuilder:storageversion` |
-| H | Validating/defaulting webhooks — `Default()`, `ValidateCreate/Update/Delete()` |
-| I | Conversion webhooks — hub-and-spoke pattern for multi-version CRD conversion |
+| Pattern | Description | Workflow |
+|---------|-------------|----------|
+| E | Resource-only (no controller) — documented in references, scaffolded by Sprint 1 | Ref only |
+| F | Controller-only for external types — documented in references, scaffolded by Sprint 1 | Ref only |
+| G | Multiple API versions (v1alpha1 → v1beta1) with `+kubebuilder:storageversion` | Workflow D |
+| H | Validating/defaulting webhooks — Default(), ValidateCreate/Update/Delete() | Workflow C |
+| I | Conversion webhooks — hub-and-spoke pattern | Workflow C (with conversion) |
 
 ### Build
-Create the skill directory and contents:
-```
-.claude/skills/designing-operator-api/
-├── SKILL.md
-├── references/
-│   ├── type-design-patterns.md
-│   ├── validation-markers.md
-│   ├── cel-validation-rules.md
-│   ├── status-conventions.md
-│   ├── api-versioning.md
-│   ├── webhook-patterns.md          # NEW — defaulting, validating, conversion webhooks
-│   └── cluster-scoped-patterns.md   # NEW — cluster vs. namespaced design considerations
-├── scripts/
-│   └── validate-api-types.py
-└── assets/
-    ├── templates/
-    │   ├── types.go.tmpl
-    │   └── webhook.go.tmpl          # NEW — webhook handler template
-    └── examples/
-        ├── simple-spec.go
-        ├── complex-spec.go
-        ├── status-conditions.go
-        └── cluster-scoped-types.go  # NEW — cluster-scoped type example
-```
 
-Source material: Extract from `go-operator/operators/database-operator/api/v1alpha1/databasecluster_types.go` and `model-registry-operator/api/v1alpha1/`.
+24 files in `.claude/skills/designing-operator-api/` (1 SKILL.md, 7 references, 1 script with 14 checks, 11 templates, 4 examples). Validated against `operator-sdk`.
 
-### Unit Test
+See `tests/designing-operator-api/test_guide.md` for full test prompts, verification commands, and acceptance criteria across all workflows.
 
-**Test 2.1 — Simple CRD design**
-```
-Prompt: "Using the designing-operator-api skill, design a CRD for RedisCluster 
-with these requirements:
-- Spec: replicas (3-7, default 3), version (enum: 6.0/7.0/7.2, default 7.2), 
-  storage size, sentinel enabled (default true)
-- Status: phase (Pending/Initializing/Running/Failed), readyReplicas, 
-  conditions (Available/Progressing/Degraded), endpoint string
-Generate api/v1alpha1/rediscluster_types.go with proper kubebuilder markers."
-```
-
-Expected output:
-- `api/v1alpha1/rediscluster_types.go` with:
-  - Spec struct with all fields and validation markers
-  - Status struct with Conditions using `metav1.Condition`
-  - Root type with `+kubebuilder:object:root=true`, `+kubebuilder:subresource:status`
-  - PrintColumn markers for `kubectl get` output
-  - List type
-  - `groupversion_info.go` with SchemeBuilder
-
-Verification:
-```bash
-# Script validation
-python3 .claude/skills/designing-operator-api/scripts/validate-api-types.py \
-  /tmp/redis-operator-test/api/v1alpha1/rediscluster_types.go
-
-# Compilation check
-cd /tmp/redis-operator-test && go build ./api/...
-```
-
-Acceptance criteria:
-- [ ] All Spec fields have json tags
-- [ ] Validation markers present (Minimum, Maximum, Enum, Default)
-- [ ] Status has `[]metav1.Condition`
-- [ ] Root type has `+kubebuilder:subresource:status`
-- [ ] At least 2 PrintColumn markers (Phase, ReadyReplicas)
-- [ ] validate-api-types.py passes
-- [ ] Code compiles
-
-**Test 2.2 — Complex CRD with nested types**
-```
-Prompt: "Using the designing-operator-api skill, extend the RedisCluster CRD 
-to add a nested StorageSpec type (size string, storageClassName string, 
-accessModes []string) and a ResourceSpec type (requests/limits for cpu and memory). 
-Also add a BackupSpec (schedule cron string, retentionDays int, destination string)."
-```
-
-Acceptance criteria:
-- [ ] Nested types defined as separate structs
-- [ ] Each nested type has proper json tags and markers
-- [ ] BackupSpec has cron validation pattern
-- [ ] Code compiles with nested types
-
-### Integration Test (Sprint 1 + 2)
-
-**Test I-1.2 — Scaffold then Design**
-```
-Prompt: "First, scaffold a new operator project called 'message-queue-operator' 
-with domain 'messaging.example.com'. Then design a CRD for MessageQueue with 
-spec fields: queueType (kafka/rabbitmq/redis), replicas (1-10), 
-persistentStorage (bool), and retentionHours (1-720). Status should include 
-phase, readyReplicas, and standard conditions."
-```
-
-Verification:
-```bash
-# Full chain validation
-bash .claude/skills/scaffolding-operator/scripts/validate-project-structure.sh /tmp/mq-operator-test/
-python3 .claude/skills/designing-operator-api/scripts/validate-api-types.py /tmp/mq-operator-test/api/v1alpha1/messagequeue_types.go
-cd /tmp/mq-operator-test && go mod tidy && go build ./...
-```
-
-Acceptance criteria:
-- [ ] Project structure valid
-- [ ] Types file valid
-- [ ] Whole project compiles end-to-end
-- [ ] PROJECT file matches types file (same group, version, kind)
+See `tests/designing-operator-api/gap_analysis.md` for detailed comparison against `operator-sdk` output.
 
 ---
 

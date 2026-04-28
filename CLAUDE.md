@@ -10,7 +10,7 @@ Replace the traditional OpenShift operator development workflow (operator-sdk CL
 
 Skills:
 1. `scaffolding-operator` — Project init, Makefile, Dockerfile, Kustomize
-2. `designing-operator-api` — CRD schema design, types.go, kubebuilder markers
+2. `designing-operator-api` — CRD schema design, types.go, kubebuilder markers, webhooks, API versioning
 3. `implementing-reconciliation` — Controller logic, idempotency, finalizers, RBAC
 4. `testing-operator` — envtest + Ginkgo test suites
 5. `bundling-operator` — OLM bundle, CSV, scorecard, certification
@@ -35,13 +35,17 @@ agentic-operator-poc/
 │   ├── development-plan.md           # Sprint plan: build order, test prompts, acceptance criteria
 │   └── self_prompts.txt              # Prompts used during research phase
 ├── tests/                             # Test guides and gap analyses, organized by skill/subagent
-│   └── scaffolding-operator/         # (others created per sprint)
-│       ├── test_guide.md             # Test prompts, verification commands, acceptance criteria
-│       └── gap_analysis.md           # Comparison with operator-sdk output
+│   ├── scaffolding-operator/
+│   │   ├── test_guide.md
+│   │   └── gap_analysis.md
+│   └── designing-operator-api/       # (others created per sprint)
+│       ├── test_guide.md
+│       └── gap_analysis.md
 └── .claude/
     ├── settings.local.json
     └── skills/                        # Skills built here (agents/ created in Sprint 6)
-        └── scaffolding-operator/     # DONE — 29 files (others created per sprint)
+        ├── scaffolding-operator/     # DONE — 29 files
+        └── designing-operator-api/   # DONE — 24 files (others created per sprint)
 ```
 
 ## Development Plan
@@ -93,15 +97,21 @@ These knowledgebase operators provide real patterns for templates and examples:
 
 ## Current Status
 
-Sprint 1 complete. `scaffolding-operator` skill built and validated against operator-sdk.
+Sprints 1-2 complete. `scaffolding-operator` and `designing-operator-api` skills built and validated against operator-sdk.
 
 ### Completed
-- **Sprint 1**: `scaffolding-operator` — 29 files (SKILL.md, 3 references, 1 script, 25 templates)
-  - Test 1.1 PASS: New project scaffold (48/48 structural checks, compiles)
-  - Test 1.2 PASS: Same-group kind (cache/RedisSentinel) — flat layout, compiles
-  - Test 1.3 PASS: Cluster-scoped kind (cache/ClusterRedisConfig) — scope=Cluster marker, compiles
-  - Test 1.4 PASS: Different-group kind (monitoring/AlertPolicy) — multi-group layout, aliased imports, compiles
-  - Test 1.5 PASS: Matches operator-sdk output across all 4 patterns
+- **Sprint 1**: `scaffolding-operator` — 29 files
+  - Tests 1.1-1.4 PASS: All 4 patterns (new project, same-group, cluster-scoped, different-group)
+  - Test 1.5 PASS: Matches operator-sdk output
+
+- **Sprint 2**: `designing-operator-api` — 24 files (SKILL.md, 7 references, 1 script, 11 templates, 4 examples)
+  - Test 2.1 PASS: Simple CRD design (14/14 validation, markers, conditions, print columns)
+  - Test 2.2 PASS: Complex CRD (StorageSpec, BackupSpec, ResourceRequirements, pointer types)
+  - Test 2.3 PASS: SDK comparison (9 markers vs 0, 4 columns vs 0, conditions vs none)
+  - Test 2.4 PASS: Webhooks (handler + 9 config files + main.go update, compiles)
+  - Test 2.5 PASS: SDK webhook comparison (structure matches, skill has real logic)
+  - Test 2.6 PASS: API versioning (v1beta1 + storageversion + maxMemory field)
+  - Test I-1.2 PASS: Integration scaffold + design (message-queue-operator end-to-end)
 
 ### Next
-- Sprint 2: `designing-operator-api`
+- Sprint 3: `implementing-reconciliation`
