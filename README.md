@@ -6,21 +6,36 @@ Build OpenShift operators using Claude Agentic Skills instead of the traditional
 
 A composable set of **5 skills + 3 subagents** that replace the manual, repetitive steps of operator development — scaffolding, CRD design, controller reconciliation, testing, and OLM bundling — with guided, template-driven AI workflows.
 
+Each skill is validated against `operator-sdk` v1.37.0 output to ensure structural compatibility while producing significantly more useful code (real validation markers vs empty stubs, production-ready controllers vs TODO comments).
+
 ## Architecture
 
 ```
 Developer
     │
-    ├── scaffolding-operator      → Project init (replaces operator-sdk init/create api)
-    ├── designing-operator-api    → CRD schema design from natural language
-    ├── implementing-reconciliation → Controller logic with idempotency patterns
-    ├── testing-operator          → envtest + Ginkgo test generation
-    └── bundling-operator         → OLM bundle, CSV, certification readiness
+    ├── scaffolding-operator         → Project init (replaces operator-sdk init/create api)
+    ├── designing-operator-api       → CRD types, markers, webhooks, API versioning
+    ├── implementing-reconciliation  → Controller logic with idempotency patterns
+    ├── testing-operator             → envtest + Ginkgo test generation
+    └── bundling-operator            → OLM bundle, CSV, certification readiness
 ```
 
 Three subagents (`operator-reviewer`, `operator-test-generator`, `operator-bundle-validator`) combine skills for specialized workflows like code review and bundle validation.
 
 See [architecture.md](architecture.md) for the full design rationale, directory structures, and composition patterns.
+
+## Current Status
+
+| Sprint | Skill | Files | Status |
+|--------|-------|-------|--------|
+| 1 | `scaffolding-operator` | 29 | Done — 4 patterns (new project, same-group, cluster-scoped, multi-group) |
+| 2 | `designing-operator-api` | 24 | Done — types, markers, webhooks, API versioning |
+| 3 | `implementing-reconciliation` | 19 | Done — three-phase reconciliation, idempotency, finalizers, conditions |
+| 4 | `testing-operator` | — | Planned |
+| 5 | `bundling-operator` | — | Planned |
+| 6-8 | Subagents | — | Planned |
+
+**72 skill files built** across 3 skills, with 5 validation scripts, validated against operator-sdk.
 
 ## Project Structure
 
@@ -31,21 +46,16 @@ agentic-operator-poc/
 │   ├── openshift-operator-research.md
 │   └── development-plan.md
 ├── tests/                       # Test guides and gap analyses per skill
-│   └── scaffolding-operator/
+│   ├── scaffolding-operator/
+│   ├── designing-operator-api/
+│   └── implementing-reconciliation/
 ├── .claude/
-│   ├── skills/                  # Skill implementations
-│   │   └── scaffolding-operator/  (30 files — built & validated)
-│   └── agents/                  # Subagent definitions
+│   └── skills/                  # Skill implementations
+│       ├── scaffolding-operator/       (29 files)
+│       ├── designing-operator-api/     (24 files)
+│       └── implementing-reconciliation/ (19 files)
 └── CLAUDE.md                    # Project context for Claude Code sessions
 ```
-
-## Current Status
-
-| Sprint | Skill | Status |
-|--------|-------|--------|
-| 1 | `scaffolding-operator` | Done — validated against operator-sdk v1.37.0 |
-| 2 | `designing-operator-api` | Next |
-| 3-8 | Remaining skills + subagents | Planned |
 
 ## How to Use
 
@@ -56,8 +66,26 @@ The skills are in `.claude/skills/`. When working in a project that has these sk
 ```
 "Create a new operator that manages PostgreSQL clusters on OpenShift"
 "Add a BackupSchedule CRD to my existing operator"
-"Review my operator controller for best practices"
+"Implement reconciliation for my controller with Secret, Service, and StatefulSet"
+"Add webhooks with defaulting and validation to my CRD"
 ```
+
+### End-to-End Example
+
+Build a complete operator in 3 steps:
+
+```
+Step 1 (scaffolding-operator): "Create a notification-operator project with 
+domain notify.example.com, group notify, kind NotificationChannel"
+
+Step 2 (designing-operator-api): "Design the CRD with type enum email/slack/pagerduty, 
+endpoint string, retryCount 1-5 default 3, conditions in status"
+
+Step 3 (implementing-reconciliation): "Implement the controller reconciling 
+Secret for API credentials and Deployment for the notification worker"
+```
+
+Result: A compilable operator project with production-ready types, markers, conditions, controller with check-create idempotency, owner references, event recording, finalizers, and status updates.
 
 ### Testing a Skill
 
@@ -66,6 +94,17 @@ Each skill has a test guide in `tests/<skill-name>/test_guide.md` with:
 - Verification commands to run
 - Acceptance criteria checklists
 - Comparison against `operator-sdk` output
+
+## What Skills Produce vs operator-sdk
+
+| Aspect | operator-sdk | Skills |
+|--------|-------------|--------|
+| Types | Stub with `Foo` field | Real fields with validation markers, conditions, print columns |
+| Controller | Empty `Reconcile()` | Three-phase pattern, check-create idempotency, owner refs, events |
+| Webhooks | Empty `Default()`/`Validate()` | Real defaulting + validation logic |
+| Status | Empty | Phase, conditions (Available/Progressing/Degraded), ObservedGeneration |
+| RBAC | 3 markers (CRD only) | 8+ markers (all managed resources) |
+| Config | Generated incrementally | All files in one pass |
 
 ## Prerequisites
 

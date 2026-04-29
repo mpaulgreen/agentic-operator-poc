@@ -86,36 +86,12 @@ See `tests/designing-operator-api/gap_analysis.md` for detailed comparison again
 ## Sprint 3: `implementing-reconciliation`
 
 ### Build
-Create the skill directory and contents:
-```
-.claude/skills/implementing-reconciliation/
-├── SKILL.md
-├── references/
-│   ├── reconciliation-architecture.md
-│   ├── idempotency-patterns.md
-│   ├── resource-orchestration.md
-│   ├── error-handling-patterns.md
-│   ├── finalizer-lifecycle.md
-│   ├── rbac-annotations.md
-│   └── event-recording.md
-├── scripts/
-│   ├── validate-rbac-annotations.py
-│   └── check-idempotency.py
-└── assets/
-    ├── templates/
-    │   ├── controller.go.tmpl
-    │   ├── reconciler-method.go.tmpl
-    │   ├── resource-builder.go.tmpl
-    │   ├── status-updater.go.tmpl
-    │   ├── conditions.go.tmpl
-    │   └── helpers.go.tmpl
-    └── examples/
-        ├── simple-reconciler.go
-        ├── complex-reconciler.go
-        └── ssa-reconciler.go
-```
 
-Source material: Extract from `go-operator/operators/database-operator/internal/controller/` (controller, reconcilers, status, conditions, helpers files).
+19 files in `.claude/skills/implementing-reconciliation/` (1 SKILL.md, 7 references, 2 scripts, 6 templates, 3 examples). Scripts validated against real database-operator (10 RBAC markers, all idempotency checks pass).
+
+See `tests/implementing-reconciliation/test_guide.md` for full test prompts, verification commands, and acceptance criteria.
+
+See `tests/implementing-reconciliation/gap_analysis.md` for detailed comparison against `operator-sdk` output.
 
 ### Unit Test
 

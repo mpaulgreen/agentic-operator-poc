@@ -1,0 +1,35 @@
+// reconcile{{RESOURCE_KIND}} ensures the {{RESOURCE_KIND}} exists with the desired state.
+func (r *{{KIND}}Reconciler) reconcile{{RESOURCE_KIND}}(ctx context.Context, cr *{{API_GROUP}}{{API_VERSION}}.{{KIND}}) error {
+	logger := log.FromContext(ctx)
+	name := fmt.Sprintf("%s-{{RESOURCE_SUFFIX}}", cr.Name)
+
+	// CHECK if exists
+	existing := &{{RESOURCE_TYPE}}{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
+	if err == nil {
+		return nil // EXISTS — idempotent
+	}
+	if !errors.IsNotFound(err) {
+		return err // ACTUAL ERROR
+	}
+
+	// BUILD desired state
+	desired := r.{{RESOURCE_KIND_LOWER}}For{{KIND}}(cr)
+
+	// SET OWNER REFERENCE
+	if err := controllerutil.SetControllerReference(cr, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	// CREATE
+	logger.Info("Creating {{RESOURCE_KIND}}", "name", name)
+	if err := r.Create(ctx, desired); err != nil {
+		r.Recorder.Event(cr, corev1.EventTypeWarning, "{{RESOURCE_KIND}}Failed",
+			fmt.Sprintf("Failed to create {{RESOURCE_KIND}} %s: %v", name, err))
+		return err
+	}
+
+	r.Recorder.Event(cr, corev1.EventTypeNormal, "{{RESOURCE_KIND}}Created",
+		fmt.Sprintf("Created {{RESOURCE_KIND}} %s", name))
+	return nil
+}

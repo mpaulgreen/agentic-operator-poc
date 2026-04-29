@@ -1,0 +1,12 @@
+// {{RESOURCE_KIND_LOWER}}For{{KIND}} returns the desired {{RESOURCE_KIND}} for the given CR.
+// This is a pure function — no API calls, no side effects.
+func (r *{{KIND}}Reconciler) {{RESOURCE_KIND_LOWER}}For{{KIND}}(cr *{{API_GROUP}}{{API_VERSION}}.{{KIND}}) *{{RESOURCE_TYPE}} {
+	return &{{RESOURCE_TYPE}}{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-{{RESOURCE_SUFFIX}}", cr.Name),
+			Namespace: cr.Namespace,
+			Labels:    labelsFor{{KIND}}(cr),
+		},
+		// TODO: Fill in spec appropriate for this resource type
+	}
+}

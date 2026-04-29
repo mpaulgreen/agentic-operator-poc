@@ -1,0 +1,88 @@
+package controller
+
+import (
+	"context"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	{{API_GROUP}}{{API_VERSION}} "{{REPO_PATH}}/api/{{API_VERSION}}"
+)
+
+const (
+	ConditionTypeAvailable   = "Available"
+	ConditionTypeProgressing = "Progressing"
+	ConditionTypeDegraded    = "Degraded"
+)
+
+const (
+	ReasonReconciling      = "Reconciling"
+	ReasonReconcileSuccess = "ReconcileSuccess"
+	ReasonReconcileError   = "ReconcileError"
+	ReasonResourcesReady   = "ResourcesReady"
+	ReasonInitializing     = "Initializing"
+)
+
+func (r *{{KIND}}Reconciler) setCondition(ctx context.Context, cr *{{API_GROUP}}{{API_VERSION}}.{{KIND}},
+	conditionType string, status metav1.ConditionStatus, reason, message string) error {
+
+	now := metav1.Now()
+	newCond := metav1.Condition{
+		Type:               conditionType,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: now,
+		ObservedGeneration: cr.Generation,
+	}
+
+	// Preserve LastTransitionTime if status unchanged
+	for i, c := range cr.Status.Conditions {
+		if c.Type == conditionType {
+			if c.Status == status {
+				newCond.LastTransitionTime = c.LastTransitionTime
+			}
+			cr.Status.Conditions[i] = newCond
+			return r.Status().Update(ctx, cr)
+		}
+	}
+
+	cr.Status.Conditions = append(cr.Status.Conditions, newCond)
+	return r.Status().Update(ctx, cr)
+}
+
+func (r *{{KIND}}Reconciler) setAvailableCondition(ctx context.Context, cr *{{API_GROUP}}{{API_VERSION}}.{{KIND}}, available bool, reason, msg string) error {
+	s := metav1.ConditionFalse
+	if available { s = metav1.ConditionTrue }
+	return r.setCondition(ctx, cr, ConditionTypeAvailable, s, reason, msg)
+}
+
+func (r *{{KIND}}Reconciler) setProgressingCondition(ctx context.Context, cr *{{API_GROUP}}{{API_VERSION}}.{{KIND}}, progressing bool, reason, msg string) error {
+	s := metav1.ConditionFalse
+	if progressing { s = metav1.ConditionTrue }
+	return r.setCondition(ctx, cr, ConditionTypeProgressing, s, reason, msg)
+}
+
+func (r *{{KIND}}Reconciler) setDegradedCondition(ctx context.Context, cr *{{API_GROUP}}{{API_VERSION}}.{{KIND}}, degraded bool, reason, msg string) error {
+	s := metav1.ConditionFalse
+	if degraded { s = metav1.ConditionTrue }
+	return r.setCondition(ctx, cr, ConditionTypeDegraded, s, reason, msg)
+}
+
+func (r *{{KIND}}Reconciler) updateConditionsForPhase(ctx context.Context, cr *{{API_GROUP}}{{API_VERSION}}.{{KIND}}) error {
+	switch cr.Status.Phase {
+	case "Pending", "Initializing":
+		if err := r.setProgressingCondition(ctx, cr, true, ReasonInitializing, "Resources initializing"); err != nil { return err }
+		if err := r.setAvailableCondition(ctx, cr, false, ReasonReconciling, "Not yet available"); err != nil { return err }
+		return r.setDegradedCondition(ctx, cr, false, ReasonReconciling, "Initializing normally")
+	case "Running":
+		if err := r.setProgressingCondition(ctx, cr, false, ReasonReconcileSuccess, "Reconciliation complete"); err != nil { return err }
+		if err := r.setAvailableCondition(ctx, cr, true, ReasonResourcesReady, "All resources ready"); err != nil { return err }
+		return r.setDegradedCondition(ctx, cr, false, ReasonReconcileSuccess, "Operating normally")
+	case "Failed":
+		if err := r.setProgressingCondition(ctx, cr, false, ReasonReconcileError, "Reconciliation failed"); err != nil { return err }
+		if err := r.setAvailableCondition(ctx, cr, false, ReasonReconcileError, "Not available"); err != nil { return err }
+		return r.setDegradedCondition(ctx, cr, true, ReasonReconcileError, "Degraded due to error")
+	}
+	return nil
+}

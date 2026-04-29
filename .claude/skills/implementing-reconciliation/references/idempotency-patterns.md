@@ -1,0 +1,74 @@
+# Idempotency Patterns
+
+## Check-Create (Most Common)
+
+```go
+existing := &corev1.Secret{}
+err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, existing)
+if err == nil { return nil }                    // EXISTS — idempotent
+if !errors.IsNotFound(err) { return err }       // ACTUAL ERROR
+// DOES NOT EXIST — create
+```
+
+Three states: exists (no-op), not found (create), error (propagate).
+
+## Check-Update (For Mutable Resources)
+
+When the spec changes, update the existing resource:
+
+```go
+existing := &appsv1.StatefulSet{}
+err := r.Get(ctx, key, existing)
+if err != nil {
+    if errors.IsNotFound(err) {
+        // Create new
+        return r.Create(ctx, desired)
+    }
+    return err
+}
+
+// Compare and update if different
+if *existing.Spec.Replicas != cr.Spec.Replicas {
+    existing.Spec.Replicas = &cr.Spec.Replicas
+    return r.Update(ctx, existing)
+}
+```
+
+Use check-update for: StatefulSet replicas, Deployment image, ConfigMap data.
+Use check-create only for: Secrets (credentials shouldn't change), Services (selectors are immutable).
+
+## Server-Side Apply (Modern Alternative)
+
+SSA reconstructs desired state from scratch each reconciliation:
+
+```go
+desired := r.buildDeployment(cr)  // pure function, no API calls
+err := r.Patch(ctx, desired, client.Apply, client.FieldOwner("my-controller"), client.ForceOwnership)
+```
+
+**Advantages**: No Get-then-Update race. Handles conflicts automatically. Cleaner code.
+**Caveats**: Fake client doesn't support SSA. Requires all managed fields in every apply. More complex for partial updates.
+
+## Owner References (Required for All Patterns)
+
+Every created resource must have an owner reference:
+
+```go
+if err := controllerutil.SetControllerReference(cr, object, r.Scheme); err != nil {
+    return err
+}
+```
+
+This enables:
+- Garbage collection (child deleted when parent deleted)
+- `Owns()` watches (child changes trigger parent reconcile)
+
+## Event Recording (Required for All Patterns)
+
+```go
+// On success
+r.Recorder.Event(cr, corev1.EventTypeNormal, "SecretCreated", name)
+
+// On failure
+r.Recorder.Event(cr, corev1.EventTypeWarning, "SecretFailed", err.Error())
+```

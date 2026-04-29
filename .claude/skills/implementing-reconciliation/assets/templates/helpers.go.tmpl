@@ -1,0 +1,27 @@
+package controller
+
+import (
+	"crypto/rand"
+	"math/big"
+
+	{{API_GROUP}}{{API_VERSION}} "{{REPO_PATH}}/api/{{API_VERSION}}"
+)
+
+func labelsFor{{KIND}}(cr *{{API_GROUP}}{{API_VERSION}}.{{KIND}}) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "{{KIND_LOWER}}",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/managed-by": "{{OPERATOR_NAME}}",
+		"app.kubernetes.io/part-of":    cr.Name,
+	}
+}
+
+func generatePassword(length int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	result := make([]byte, length)
+	for i := range result {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		result[i] = chars[n.Int64()]
+	}
+	return string(result)
+}

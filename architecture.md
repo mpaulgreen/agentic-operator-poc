@@ -477,7 +477,7 @@ No new skills needed for higher levels — just deeper reference documents and m
 ```
 
 **Planned totals**: 5 skills, 25 reference docs, 9 scripts, 20+ templates, 8 examples, 3 subagents.
-**Actual (Sprints 1-2)**: 2 skills built with 53 files total (29 scaffolding + 24 API design).
+**Actual (Sprints 1-3)**: 3 skills built with 72 files total (29 scaffolding + 24 API design + 19 reconciliation).
 
 ---
 
@@ -487,7 +487,7 @@ No new skills needed for higher levels — just deeper reference documents and m
 |-----------|--------|--------|-------|-------|
 | `scaffolding-operator` | 1 | **DONE** | 29 | Validated against operator-sdk v1.37.0. 4 patterns tested: A (new project), B (same-group), D (cluster-scoped), C (different-group). 48-check validation script. |
 | `designing-operator-api` | 2 | **DONE** | 24 | 4 workflows (types, modify, webhooks, versioning). 7 references, 1 script, 2 templates + 9 config templates, 4 examples. Validated against SDK. |
-| `implementing-reconciliation` | 3 | Pending | — | |
+| `implementing-reconciliation` | 3 | **DONE** | 19 | 2 workflows (new controller, add resource). 7 references, 2 scripts (RBAC + idempotency), 6 templates, 3 examples. Validated against database-operator. |
 | `testing-operator` | 4 | Pending | — | |
 | `bundling-operator` | 5 | Pending | — | |
 | `operator-reviewer` | 6 | Pending | — | |

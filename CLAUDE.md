@@ -97,7 +97,7 @@ These knowledgebase operators provide real patterns for templates and examples:
 
 ## Current Status
 
-Sprints 1-2 complete. `scaffolding-operator` and `designing-operator-api` skills built and validated against operator-sdk.
+Sprints 1-3 complete. `scaffolding-operator`, `designing-operator-api`, and `implementing-reconciliation` skills built and validated.
 
 ### Completed
 - **Sprint 1**: `scaffolding-operator` — 29 files
@@ -113,5 +113,13 @@ Sprints 1-2 complete. `scaffolding-operator` and `designing-operator-api` skills
   - Test 2.6 PASS: API versioning (v1beta1 + storageversion + maxMemory field)
   - Test I-1.2 PASS: Integration scaffold + design (message-queue-operator end-to-end)
 
+- **Sprint 3**: `implementing-reconciliation` — 19 files (SKILL.md, 7 references, 2 scripts, 6 templates, 3 examples)
+  - Test 3.1 PASS: Simple reconciler (5 files, RBAC 8→9 markers, idempotency, 3 reconciler methods, compiles)
+  - Test 3.2 PASS: Finalizer lifecycle (add/check/cleanup/remove, handleDeletion)
+  - Test 3.3 PASS: Add ConfigMap resource (Workflow B — new method, RBAC, Owns, correct dependency order)
+  - Test 3.4 PASS: SDK comparison (5 files vs 1 stub, 9 RBAC vs 3, 7 events vs 0, 4 Owns vs 0)
+  - Test I-1.2.3 PASS: Integration scaffold+design+reconcile (notification-operator, all 4 scripts pass, compiles)
+  - Scripts validated against real database-operator (10 RBAC markers, all idempotency checks pass)
+
 ### Next
-- Sprint 3: `implementing-reconciliation`
+- Sprint 4: `testing-operator`
