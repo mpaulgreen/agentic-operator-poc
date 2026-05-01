@@ -238,10 +238,12 @@ testing-operator/
 
 ---
 
-### Skill 5: `bundling-operator`
+### Skill 5: `bundling-operator` (BUILT & VALIDATED)
 **Purpose**: OLM bundle generation, CSV authoring, certification readiness  
 **Maps to**: OLM Bundling (80% boilerplate / 20% creative)  
 **Trigger**: "create bundle", "generate csv", "olm bundle", "scorecard", "certify operator"
+
+**Status**: Sprint 5 complete. Validated against database-operator bundle — all 3 scripts pass (validate-csv.py, validate-bundle-structure.sh, check-scorecard-readiness.py).
 
 ```
 bundling-operator/
@@ -477,7 +479,7 @@ No new skills needed for higher levels — just deeper reference documents and m
 ```
 
 **Planned totals**: 5 skills, 25 reference docs, 9 scripts, 20+ templates, 8 examples, 3 subagents.
-**Actual (Sprints 1-4)**: 4 skills built with 84 files total (29 scaffolding + 24 API design + 19 reconciliation + 12 testing).
+**Actual (Sprints 1-5)**: 5 skills built with 99 files total (29 scaffolding + 24 API design + 19 reconciliation + 12 testing + 15 bundling).
 
 ---
 
@@ -489,7 +491,7 @@ No new skills needed for higher levels — just deeper reference documents and m
 | `designing-operator-api` | 2 | **DONE** | 24 | 4 workflows (types, modify, webhooks, versioning). 7 references, 1 script, 2 templates + 9 config templates, 4 examples. Validated against SDK. |
 | `implementing-reconciliation` | 3 | **DONE** | 19 | 2 workflows (new controller, add resource). 7 references, 2 scripts (RBAC + idempotency), 6 templates, 3 examples. Validated against database-operator. |
 | `testing-operator` | 4 | **DONE** | 12 | 2 workflows (full suite, single method). 4 references, 2 scripts (coverage + test matrix), 4 templates, 1 example. |
-| `bundling-operator` | 5 | Pending | — | |
+| `bundling-operator` | 5 | **DONE** | 15 | 2 workflows (initial bundle, version update). 6 references, 3 scripts (CSV + structure + scorecard), 4 templates, 1 example. Validated against database-operator bundle. |
 | `operator-reviewer` | 6 | Pending | — | |
 | `operator-test-generator` | 7 | Pending | — | |
 | `operator-bundle-validator` | 8 | Pending | — | |

@@ -1,0 +1,196 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "{{GROUP}}/{{API_VERSION}}",
+          "kind": "{{KIND}}",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "{{OPERATOR_NAME}}"
+            },
+            "name": "{{KIND_LOWER}}-sample"
+          },
+          "spec": {
+            {{ALM_SPEC_FIELDS}}
+          }
+        }
+      ]
+    capabilities: {{CAPABILITIES}}
+    categories: {{CATEGORY}}
+    certified: "false"
+    createdAt: "{{CREATED_AT}}"
+    operators.operatorframework.io/builder: operator-sdk-v1.37.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: {{REPOSITORY}}
+  name: {{OPERATOR_NAME}}.v{{VERSION}}
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: {{KIND}} is the Schema for the {{KIND_PLURAL}} API
+      displayName: {{DISPLAY_NAME_KIND}}
+      kind: {{KIND}}
+      name: {{KIND_PLURAL}}.{{GROUP}}
+      version: {{API_VERSION}}
+      specDescriptors:
+      {{SPEC_DESCRIPTORS}}
+      statusDescriptors:
+      {{STATUS_DESCRIPTORS}}
+  description: |
+    ## Overview
+    {{DESCRIPTION}}
+  displayName: {{DISPLAY_NAME}}
+  icon:
+  - base64data: "{{ICON_BASE64}}"
+    mediatype: "{{ICON_MEDIATYPE}}"
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        {{CLUSTER_PERMISSION_RULES}}
+        serviceAccountName: {{SA_NAME}}
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: {{OPERATOR_NAME}}
+          control-plane: controller-manager
+        name: {{SA_NAME}}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=0
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 5m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                command:
+                - /manager
+                image: {{IMAGE}}
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: {{SA_NAME}}
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: {{SA_NAME}}
+    strategy: deployment
+  installModes:
+  - supported: {{INSTALL_OWN_NAMESPACE}}
+    type: OwnNamespace
+  - supported: {{INSTALL_SINGLE_NAMESPACE}}
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: {{INSTALL_ALL_NAMESPACES}}
+    type: AllNamespaces
+  keywords:
+  {{KEYWORDS}}
+  links:
+  - name: Documentation
+    url: {{REPOSITORY}}
+  - name: Source Code
+    url: {{REPOSITORY}}
+  maintainers:
+  - email: {{MAINTAINER_EMAIL}}
+    name: {{MAINTAINER_NAME}}
+  maturity: {{MATURITY}}
+  minKubeVersion: "1.25.0"
+  provider:
+    name: {{PROVIDER_NAME}}
+    url: {{PROVIDER_URL}}
+  {{REPLACES_FIELD}}
+  version: {{VERSION}}

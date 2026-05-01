@@ -38,14 +38,20 @@ agentic-operator-poc/
 │   ├── scaffolding-operator/
 │   │   ├── test_guide.md
 │   │   └── gap_analysis.md
-│   └── designing-operator-api/       # (others created per sprint)
+│   ├── designing-operator-api/
+│   │   ├── test_guide.md
+│   │   └── gap_analysis.md
+│   └── bundling-operator/           # (others created per sprint)
 │       ├── test_guide.md
 │       └── gap_analysis.md
 └── .claude/
     ├── settings.local.json
     └── skills/                        # Skills built here (agents/ created in Sprint 6)
         ├── scaffolding-operator/     # DONE — 29 files
-        └── designing-operator-api/   # DONE — 24 files (others created per sprint)
+        ├── designing-operator-api/   # DONE — 24 files
+        ├── implementing-reconciliation/ # DONE — 19 files
+        ├── testing-operator/         # DONE — 12 files
+        └── bundling-operator/        # DONE — 15 files
 ```
 
 ## Development Plan
@@ -97,7 +103,7 @@ These knowledgebase operators provide real patterns for templates and examples:
 
 ## Current Status
 
-Sprints 1-4 complete. `scaffolding-operator`, `designing-operator-api`, `implementing-reconciliation`, and `testing-operator` skills built and validated.
+Sprints 1-5 complete. `scaffolding-operator`, `designing-operator-api`, `implementing-reconciliation`, `testing-operator`, and `bundling-operator` skills built and validated.
 
 ### Completed
 - **Sprint 1**: `scaffolding-operator` — 29 files
@@ -124,5 +130,11 @@ Sprints 1-4 complete. `scaffolding-operator`, `designing-operator-api`, `impleme
 - **Sprint 4**: `testing-operator` — 12 files (SKILL.md, 4 references, 2 scripts, 4 templates, 1 example)
   - Test 4.1 PASS: Full test suite (suite_test.go + controller_test.go, 9 test cases, 4/4 methods 100% coverage, go vet passes)
 
+- **Sprint 5**: `bundling-operator` — 15 files (SKILL.md, 6 references, 3 scripts, 4 templates, 1 example)
+  - Scripts validated against database-operator bundle (0 errors each)
+  - validate-csv.py: 20 checks (apiVersion, name pattern, version, alm-examples, CRDs, RBAC, deployments, installModes, descriptors)
+  - validate-bundle-structure.sh: 13 checks (directories, CSV, CRD, annotations keys, Dockerfile LABELs, FROM scratch)
+  - check-scorecard-readiness.py: checks scorecard config tests, alm-examples coverage, descriptor paths
+
 ### Next
-- Sprint 5: `bundling-operator`
+- Sprint 6: `operator-reviewer` (subagent)

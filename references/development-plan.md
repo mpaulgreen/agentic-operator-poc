@@ -327,32 +327,12 @@ Acceptance criteria:
 ## Sprint 5: `bundling-operator`
 
 ### Build
-Create the skill directory and contents:
-```
-.claude/skills/bundling-operator/
-├── SKILL.md
-├── references/
-│   ├── csv-anatomy.md
-│   ├── bundle-structure.md
-│   ├── olm-v0-vs-v1.md
-│   ├── scorecard-tests.md
-│   ├── certification-checklist.md
-│   └── catalog-management.md
-├── scripts/
-│   ├── validate-csv.py
-│   ├── validate-bundle-structure.sh
-│   └── check-scorecard-readiness.py
-└── assets/
-    ├── templates/
-    │   ├── csv.yaml.tmpl
-    │   ├── annotations.yaml.tmpl
-    │   ├── bundle.dockerfile.tmpl
-    │   └── scorecard-config.yaml.tmpl
-    └── examples/
-        └── database-operator-csv.yaml
-```
 
-Source material: Extract from `go-operator/operators/database-operator/bundle/` (CSV, annotations, Dockerfile).
+15 files in `.claude/skills/bundling-operator/` (1 SKILL.md, 6 references, 3 scripts, 4 templates, 1 example). Scripts validated against database-operator bundle (0 errors each).
+
+See `tests/bundling-operator/test_guide.md` for full test prompts, verification commands, and acceptance criteria.
+
+See `tests/bundling-operator/gap_analysis.md` for detailed comparison against `make bundle` output.
 
 ### Unit Test
 
