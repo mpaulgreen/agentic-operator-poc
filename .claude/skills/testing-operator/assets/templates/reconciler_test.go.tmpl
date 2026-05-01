@@ -1,0 +1,39 @@
+// Template for per-reconciler method tests.
+// Generate one Context block per reconcileX() method.
+
+// Context("When reconciling {{RESOURCE_KIND}}", func() {
+//     It("should create {{RESOURCE_KIND}} when absent", func() {
+//         err := reconciler.reconcile{{RESOURCE_KIND}}(ctx, cr)
+//         Expect(err).NotTo(HaveOccurred())
+//
+//         resource := &{{RESOURCE_TYPE}}{}
+//         Expect(k8sClient.Get(ctx, types.NamespacedName{
+//             Name:      fmt.Sprintf("%s-{{RESOURCE_SUFFIX}}", cr.Name),
+//             Namespace: cr.Namespace,
+//         }, resource)).To(Succeed())
+//
+//         // Verify data content
+//         // Expect(resource.Data).To(HaveKey("password"))
+//
+//         // Verify owner reference
+//         Expect(resource.OwnerReferences).To(HaveLen(1))
+//         Expect(resource.OwnerReferences[0].Name).To(Equal(cr.Name))
+//     })
+//
+//     It("should not recreate existing {{RESOURCE_KIND}}", func() {
+//         // First reconcile
+//         Expect(reconciler.reconcile{{RESOURCE_KIND}}(ctx, cr)).To(Succeed())
+//
+//         // Get original resource version
+//         resource := &{{RESOURCE_TYPE}}{}
+//         Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+//         originalVersion := resource.ResourceVersion
+//
+//         // Second reconcile (should be no-op)
+//         Expect(reconciler.reconcile{{RESOURCE_KIND}}(ctx, cr)).To(Succeed())
+//
+//         // Verify resource version unchanged
+//         Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+//         Expect(resource.ResourceVersion).To(Equal(originalVersion))
+//     })
+// })

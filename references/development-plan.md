@@ -201,7 +201,14 @@ Acceptance criteria:
 ## Sprint 4: `testing-operator`
 
 ### Build
-Create the skill directory and contents:
+
+12 files in `.claude/skills/testing-operator/` (1 SKILL.md, 4 references, 2 scripts, 4 templates, 1 example). Scripts validated: check-test-coverage finds test files/cases, generate-test-matrix verifies 100% method coverage.
+
+See `tests/testing-operator/test_guide.md` for full test prompts, verification commands, and acceptance criteria.
+
+See `tests/testing-operator/gap_analysis.md` for detailed comparison against `operator-sdk` test output.
+
+### _Original planned file listing (for reference)_
 ```
 .claude/skills/testing-operator/
 ├── SKILL.md
@@ -641,6 +648,8 @@ Acceptance criteria:
 ## E2E Scenario Tests (After All Sprints)
 
 These test complete workflows across all skills and subagents.
+
+> **Note (from Sprint 4 Test 4.3):** The SDK generates E2E test skeletons (`test/e2e/`) that our testing-operator skill does not currently generate. E2E tests require a real cluster and are not practical during skill development. Once all 5 skills and 3 subagents are built, add E2E test generation support to the testing-operator skill (using `assets/templates/e2e_test.go.tmpl` as a starting point) and validate during the E2E scenario tests below.
 
 ### Scenario A: New Operator from Scratch
 

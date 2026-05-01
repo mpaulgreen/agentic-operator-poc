@@ -97,7 +97,7 @@ These knowledgebase operators provide real patterns for templates and examples:
 
 ## Current Status
 
-Sprints 1-3 complete. `scaffolding-operator`, `designing-operator-api`, and `implementing-reconciliation` skills built and validated.
+Sprints 1-4 complete. `scaffolding-operator`, `designing-operator-api`, `implementing-reconciliation`, and `testing-operator` skills built and validated.
 
 ### Completed
 - **Sprint 1**: `scaffolding-operator` — 29 files
@@ -121,5 +121,8 @@ Sprints 1-3 complete. `scaffolding-operator`, `designing-operator-api`, and `imp
   - Test I-1.2.3 PASS: Integration scaffold+design+reconcile (notification-operator, all 4 scripts pass, compiles)
   - Scripts validated against real database-operator (10 RBAC markers, all idempotency checks pass)
 
+- **Sprint 4**: `testing-operator` — 12 files (SKILL.md, 4 references, 2 scripts, 4 templates, 1 example)
+  - Test 4.1 PASS: Full test suite (suite_test.go + controller_test.go, 9 test cases, 4/4 methods 100% coverage, go vet passes)
+
 ### Next
-- Sprint 4: `testing-operator`
+- Sprint 5: `bundling-operator`
