@@ -41,7 +41,13 @@ agentic-operator-poc/
 │   ├── designing-operator-api/
 │   │   ├── test_guide.md
 │   │   └── gap_analysis.md
-│   └── bundling-operator/           # (others created per sprint)
+│   ├── implementing-reconciliation/
+│   │   ├── test_guide.md
+│   │   └── gap_analysis.md
+│   ├── testing-operator/
+│   │   ├── test_guide.md
+│   │   └── gap_analysis.md
+│   └── bundling-operator/
 │       ├── test_guide.md
 │       └── gap_analysis.md
 └── .claude/
@@ -128,13 +134,14 @@ Sprints 1-5 complete. `scaffolding-operator`, `designing-operator-api`, `impleme
   - Scripts validated against real database-operator (10 RBAC markers, all idempotency checks pass)
 
 - **Sprint 4**: `testing-operator` — 12 files (SKILL.md, 4 references, 2 scripts, 4 templates, 1 example)
-  - Test 4.1 PASS: Full test suite (suite_test.go + controller_test.go, 9 test cases, 4/4 methods 100% coverage, go vet passes)
+  - Test 4.1 PASS: Full test suite (suite_test.go + controller_test.go, 14 test cases, 4/4 methods 100% coverage, go vet passes)
+  - Test 4.2 PASS: ConfigMap tests present with redis.conf content verification and idempotency
+  - Test 4.3 PASS: SDK comparison (14 test cases vs 1, skill has per-method + idempotency + helpers)
 
 - **Sprint 5**: `bundling-operator` — 15 files (SKILL.md, 6 references, 3 scripts, 4 templates, 1 example)
-  - Scripts validated against database-operator bundle (0 errors each)
-  - validate-csv.py: 20 checks (apiVersion, name pattern, version, alm-examples, CRDs, RBAC, deployments, installModes, descriptors)
-  - validate-bundle-structure.sh: 13 checks (directories, CSV, CRD, annotations keys, Dockerfile LABELs, FROM scratch)
-  - check-scorecard-readiness.py: checks scorecard config tests, alm-examples coverage, descriptor paths
+  - Test 5.1 PASS: Initial bundle (structure 13/13, CSV 22/22, scorecard 17/17, 0 errors 0 warnings)
+  - Test 5.2 PASS: Version update v0.1.0→v0.2.0 (replaces, cronjobs RBAC, 3 backup descriptors, all scripts pass)
+  - Test 5.3 PASS: SDK comparison (9 specDescriptors vs 0, 4 statusDescriptors vs 0, 11 RBAC rules vs 5)
 
 ### Next
 - Sprint 6: `operator-reviewer` (subagent)

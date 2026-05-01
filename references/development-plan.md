@@ -208,120 +208,6 @@ See `tests/testing-operator/test_guide.md` for full test prompts, verification c
 
 See `tests/testing-operator/gap_analysis.md` for detailed comparison against `operator-sdk` test output.
 
-### _Original planned file listing (for reference)_
-```
-.claude/skills/testing-operator/
-├── SKILL.md
-├── references/
-│   ├── envtest-setup.md
-│   ├── ginkgo-patterns.md
-│   ├── test-scenarios.md
-│   └── e2e-patterns.md
-├── scripts/
-│   ├── check-test-coverage.sh
-│   └── generate-test-matrix.py
-└── assets/
-    ├── templates/
-    │   ├── suite_test.go.tmpl
-    │   ├── controller_test.go.tmpl
-    │   ├── reconciler_test.go.tmpl
-    │   └── e2e_test.go.tmpl
-    └── examples/
-        └── database-controller-test.go
-```
-
-Source material: Extract from `go-operator/operators/database-operator/internal/controller/databasecluster_controller_test.go` and `suite_test.go`.
-
-### Unit Test
-
-**Test 4.1 — Generate controller test suite**
-```
-Prompt: "Using the testing-operator skill, generate a complete test suite for 
-the RedisCluster controller at internal/controller/rediscluster_controller.go. 
-The controller has these reconciler methods: reconcileSecret, reconcileConfigMap, 
-reconcileService, reconcileStatefulSet, and uses finalizers.
-
-Generate:
-- internal/controller/suite_test.go (envtest setup)
-- internal/controller/rediscluster_controller_test.go (all test cases)
-
-For each reconciler method, test:
-1. Creates resource when absent
-2. Is idempotent when resource already exists (no error, no duplicate)
-3. Handles errors gracefully
-4. Updates status on spec change
-
-Also test:
-- Finalizer is added on first reconciliation
-- Deletion triggers cleanup
-- Status conditions are set correctly"
-```
-
-Expected output:
-- `suite_test.go` with envtest Environment, CRD paths, k8sClient, testEnv
-- `controller_test.go` with Ginkgo Describe/Context/It structure
-- Per-reconciler test blocks (4 tests × 4 methods = 16 test cases)
-- Finalizer test (add + cleanup)
-- Status test (phase transitions)
-
-Verification:
-```bash
-# Test matrix check
-python3 .claude/skills/testing-operator/scripts/generate-test-matrix.py \
-  /tmp/redis-operator-test/internal/controller/rediscluster_controller.go \
-  /tmp/redis-operator-test/internal/controller/rediscluster_controller_test.go
-
-# Run tests (requires envtest binaries)
-cd /tmp/redis-operator-test && make test
-```
-
-Acceptance criteria:
-- [ ] suite_test.go compiles and sets up envtest
-- [ ] Every reconciler method has at least 3 test cases (create, idempotent, error)
-- [ ] Finalizer lifecycle tested (add, cleanup, remove)
-- [ ] Status updates tested
-- [ ] generate-test-matrix.py shows full coverage
-- [ ] `make test` passes (or fails only due to envtest binary availability, not code errors)
-
-**Test 4.2 — Generate tests for single new method**
-```
-Prompt: "Using the testing-operator skill, generate tests for ONLY the new 
-reconcileConfigMap() method that was added to the RedisCluster controller. 
-Add tests to the existing test file. Test create, idempotent, error, and 
-verify the ConfigMap data contains the expected redis.conf settings."
-```
-
-Acceptance criteria:
-- [ ] Tests added to existing file (not a new file)
-- [ ] Tests verify ConfigMap data content, not just existence
-- [ ] Tests follow same Ginkgo pattern as existing tests
-
-### Integration Test (Sprint 1 + 2 + 3 + 4)
-
-**Test I-1.2.3.4 — Full dev cycle through testing**
-```
-Prompt: "Build and test a complete operator:
-1. Scaffold 'notification-operator' with domain 'notify.example.com'
-2. Design CRD for NotificationChannel: spec has type (email/slack/pagerduty), 
-   endpoint string, retryCount (1-5), retryDelay string. 
-   Status: phase, lastDelivery timestamp, conditions.
-3. Implement controller reconciling: Secret (API credentials), ConfigMap (channel config), 
-   Deployment (notification worker)
-4. Generate complete test suite and run it."
-```
-
-Verification:
-```bash
-cd /tmp/notification-operator-test && go mod tidy && make test
-```
-
-Acceptance criteria:
-- [ ] Project scaffolds cleanly
-- [ ] Types compile with markers
-- [ ] Controller compiles with reconcilers
-- [ ] Tests compile and cover all reconciler methods
-- [ ] `make test` runs (pass or fail with clear diagnostics)
-
 ---
 
 ## Sprint 5: `bundling-operator`
@@ -338,74 +224,13 @@ See `tests/bundling-operator/gap_analysis.md` for detailed comparison against `m
 
 **Test 5.1 — Generate initial bundle**
 ```
-Prompt: "Using the bundling-operator skill, create an OLM bundle for the 
-redis-operator v0.1.0. The operator:
-- Manages RedisCluster CRD (redis.example.com/v1alpha1)
-- CRD spec fields: replicas, version, storage, sentinel, persistencePolicy
-- CRD status fields: phase, readyReplicas, conditions, endpoint
-- Needs RBAC for: statefulsets, services, secrets, configmaps, pods
-- Install mode: OwnNamespace, SingleNamespace
-- Channel: alpha
-- Category: Database
-- Display name: Redis Operator
-- Description: Manages Redis clusters on OpenShift with HA via Sentinel
-
-Generate:
-- bundle/manifests/redis-operator.clusterserviceversion.yaml
-- bundle/manifests/redis.example.com_redisclusters.yaml (CRD)
-- bundle/metadata/annotations.yaml
-- bundle/tests/scorecard/config.yaml
-- bundle.Dockerfile"
+Prompt: see tests/bundling-operator/test_guide.md Test 5.1
 ```
-
-Expected output:
-- CSV with all required sections (metadata, spec.customresourcedefinitions, spec.install, spec.installModes)
-- specDescriptors and statusDescriptors matching CRD fields
-- RBAC permissions in CSV matching controller RBAC markers
-- alm-examples with a valid sample CR
-- annotations.yaml with correct mediatype, package, channel
-- scorecard config with basic and olm test suites
-
-Verification:
-```bash
-# Bundle structure
-bash .claude/skills/bundling-operator/scripts/validate-bundle-structure.sh /tmp/redis-operator-test/bundle/
-
-# CSV validation
-python3 .claude/skills/bundling-operator/scripts/validate-csv.py \
-  /tmp/redis-operator-test/bundle/manifests/redis-operator.clusterserviceversion.yaml
-
-# Scorecard readiness
-python3 .claude/skills/bundling-operator/scripts/check-scorecard-readiness.py /tmp/redis-operator-test/bundle/
-```
-
-Acceptance criteria:
-- [ ] Bundle structure valid (manifests/, metadata/, tests/)
-- [ ] CSV has all required sections
-- [ ] specDescriptors match CRD spec fields
-- [ ] statusDescriptors match CRD status fields
-- [ ] RBAC in CSV matches controller RBAC markers
-- [ ] alm-examples contains valid sample CR YAML
-- [ ] All three validation scripts pass
 
 **Test 5.2 — Update bundle for new version**
 ```
-Prompt: "Using the bundling-operator skill, update the redis-operator bundle 
-from v0.1.0 to v0.2.0. Changes: added BackupSpec to CRD (schedule, retentionDays, 
-destination fields) and new reconcileCronJob method. Update the CSV with:
-- New version 0.2.0
-- replaces: redis-operator.v0.1.0
-- New RBAC for batch/cronjobs
-- New specDescriptors for backup fields
-- Updated alm-examples showing backup configuration"
+Prompt: see tests/bundling-operator/test_guide.md Test 5.2
 ```
-
-Acceptance criteria:
-- [ ] CSV version updated to 0.2.0
-- [ ] `spec.replaces` set to redis-operator.v0.1.0
-- [ ] New RBAC entry for batch/cronjobs
-- [ ] New specDescriptors for backup.schedule, backup.retentionDays, backup.destination
-- [ ] alm-examples includes backup configuration
 
 ### Integration Test (All 5 Skills)
 

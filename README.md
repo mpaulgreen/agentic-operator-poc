@@ -31,11 +31,11 @@ See [architecture.md](architecture.md) for the full design rationale, directory 
 | 1 | `scaffolding-operator` | 29 | Done — 4 patterns (new project, same-group, cluster-scoped, multi-group) |
 | 2 | `designing-operator-api` | 24 | Done — types, markers, webhooks, API versioning |
 | 3 | `implementing-reconciliation` | 19 | Done — three-phase reconciliation, idempotency, finalizers, conditions |
-| 4 | `testing-operator` | — | Planned |
-| 5 | `bundling-operator` | — | Planned |
+| 4 | `testing-operator` | 12 | Done — envtest + Ginkgo test generation, per-method coverage |
+| 5 | `bundling-operator` | 15 | Done — OLM bundle, CSV, scorecard, certification readiness |
 | 6-8 | Subagents | — | Planned |
 
-**72 skill files built** across 3 skills, with 5 validation scripts, validated against operator-sdk.
+**99 skill files built** across 5 skills, with 9 validation scripts, validated against operator-sdk.
 
 ## Project Structure
 
@@ -48,12 +48,16 @@ agentic-operator-poc/
 ├── tests/                       # Test guides and gap analyses per skill
 │   ├── scaffolding-operator/
 │   ├── designing-operator-api/
-│   └── implementing-reconciliation/
+│   ├── implementing-reconciliation/
+│   ├── testing-operator/
+│   └── bundling-operator/
 ├── .claude/
 │   └── skills/                  # Skill implementations
 │       ├── scaffolding-operator/       (29 files)
 │       ├── designing-operator-api/     (24 files)
-│       └── implementing-reconciliation/ (19 files)
+│       ├── implementing-reconciliation/ (19 files)
+│       ├── testing-operator/           (12 files)
+│       └── bundling-operator/          (15 files)
 └── CLAUDE.md                    # Project context for Claude Code sessions
 ```
 
@@ -83,9 +87,15 @@ endpoint string, retryCount 1-5 default 3, conditions in status"
 
 Step 3 (implementing-reconciliation): "Implement the controller reconciling 
 Secret for API credentials and Deployment for the notification worker"
+
+Step 4 (testing-operator): "Generate a complete test suite with envtest 
+and Ginkgo for all reconciler methods"
+
+Step 5 (bundling-operator): "Create an OLM bundle v0.1.0 for the alpha 
+channel with category Monitoring"
 ```
 
-Result: A compilable operator project with production-ready types, markers, conditions, controller with check-create idempotency, owner references, event recording, finalizers, and status updates.
+Result: A compilable operator project with production-ready types, markers, conditions, controller with check-create idempotency, owner references, event recording, finalizers, status updates, comprehensive test suite, and OLM bundle ready for certification.
 
 ### Testing a Skill
 
@@ -104,6 +114,8 @@ Each skill has a test guide in `tests/<skill-name>/test_guide.md` with:
 | Webhooks | Empty `Default()`/`Validate()` | Real defaulting + validation logic |
 | Status | Empty | Phase, conditions (Available/Progressing/Degraded), ObservedGeneration |
 | RBAC | 3 markers (CRD only) | 8+ markers (all managed resources) |
+| Tests | 1 test case (basic reconcile stub) | 14 test cases (lifecycle, per-method create/idempotent, helpers) |
+| CSV | No specDescriptors/statusDescriptors | 9 specDescriptors + 4 statusDescriptors, rich alm-examples |
 | Config | Generated incrementally | All files in one pass |
 
 ## Prerequisites
