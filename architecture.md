@@ -515,6 +515,28 @@ No new skills needed for higher levels — just deeper reference documents and m
 4. **API versioning is a type concern, not a scaffolding concern.** Creating `api/v1beta1/` with `+kubebuilder:storageversion` and registering the new scheme in main.go belongs in the API design skill, not scaffolding.
 5. **Webhook config is 9 files.** More than expected — webhook service, kustomization, kustomizeconfig, certmanager certificate, certmanager kustomization, certmanager kustomizeconfig, manager webhook patch, CA injection patch, CRD webhook patch. Templates prevent manual errors.
 
+### Sprint 3 Lessons Learned
+
+1. **Test ALL tests in the test guide before declaring done.** Sprint 3 was initially declared complete after only Test 3.1, but the test guide had Tests 3.2, 3.3, 3.4, and I-1.2.3 remaining. User caught this gap.
+2. **RBAC validation script regex must handle both marker styles.** `//+kubebuilder:rbac` (no space) and `// +kubebuilder:rbac` (with space) are both valid. Initial regex only matched one.
+3. **Test matrix needs indirect coverage detection.** Tests call `Reconcile()` which internally calls `reconcileSecret()`, etc. The test matrix script must detect resource type names (Secret, Service) as indirect coverage, not just direct method calls.
+4. **`go vet` catches test signature mismatches.** A test passed a string to `labelsForRedisCluster()` but the function takes `*RedisCluster`. `go vet` caught this even though `go build` did not (since tests are in the same package).
+5. **SDK comparison tests need a step to create the SDK project first.** Test 3.4 initially assumed `/tmp/redis-operator-sdk/` existed from a prior test. Each SDK comparison test must be self-contained.
+
+### Sprint 4 Lessons Learned
+
+1. **envtest has no kubelet.** Pods won't run, Deployments won't create ReplicaSets, StatefulSets won't create Pods. `ReadyReplicas` stays 0. Tests verify the reconciler creates the right objects, not that they become "Ready".
+2. **The SDK generates E2E test skeletons (`test/e2e/`) that our skill does not.** E2E tests require a real cluster. This gap is documented in development-plan.md for post-Sprint-8 work.
+3. **Skill generates 14x more test cases than SDK.** SDK produces 1 test case (basic reconcile stub). Skill produces 14 (lifecycle, per-method create/idempotent, helpers). The 14:1 ratio is the clearest value demonstration.
+
+### Sprint 5 Lessons Learned
+
+1. **CSV has ~15 required sections.** metadata.annotations (alm-examples, capabilities, categories), spec.customresourcedefinitions.owned (with specDescriptors/statusDescriptors), spec.install (clusterPermissions, permissions, deployments), spec.installModes, displayName, description, icon, maturity, version. Missing any one causes scorecard failures.
+2. **RBAC in CSV has two scopes.** `clusterPermissions` for cluster-scoped rules (CRD access, managed resources) and `permissions` for namespace-scoped rules (leader election: configmaps, leases, events). Both are required.
+3. **Descriptor paths must match CRD schema exactly.** `specDescriptors[].path` uses dot notation (`backup.schedule`). The `check-scorecard-readiness.py` script validates these paths against the CRD's OpenAPI schema to catch mismatches before scorecard runs.
+4. **annotations.yaml must be mirrored as Dockerfile LABELs.** Every key in `bundle/metadata/annotations.yaml` must appear as a `LABEL` in `bundle.Dockerfile`. The validate-bundle-structure.sh script checks this.
+5. **`make bundle` requires interactive input on first run.** The `operator-sdk generate kustomize manifests` step prompts for display name and description. Use `--interactive=false` to skip prompts when automating SDK comparison tests.
+
 ---
 
 ## Source Material for Templates and Examples
