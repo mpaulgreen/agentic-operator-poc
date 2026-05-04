@@ -33,9 +33,10 @@ See [architecture.md](architecture.md) for the full design rationale, directory 
 | 3 | `implementing-reconciliation` | 19 | Done — three-phase reconciliation, idempotency, finalizers, conditions |
 | 4 | `testing-operator` | 12 | Done — envtest + Ginkgo test generation, per-method coverage |
 | 5 | `bundling-operator` | 15 | Done — OLM bundle, CSV, scorecard, certification readiness |
-| 6-8 | Subagents | — | Planned |
+| 6 | `operator-reviewer` (subagent) | 1 | Done — code review, composes skills 2+3, validated against ACM operator |
+| 7-8 | Subagents | — | Planned |
 
-**99 skill files built** across 5 skills, with 9 validation scripts, validated against operator-sdk.
+**99 skill files + 1 subagent** across 5 skills, with 9 validation scripts, validated against operator-sdk and ACM.
 
 ## Project Structure
 
@@ -50,8 +51,11 @@ agentic-operator-poc/
 │   ├── designing-operator-api/
 │   ├── implementing-reconciliation/
 │   ├── testing-operator/
-│   └── bundling-operator/
+│   ├── bundling-operator/
+│   └── operator-reviewer/
 ├── .claude/
+│   ├── agents/                  # Subagent definitions
+│   │   └── operator-reviewer.md
 │   └── skills/                  # Skill implementations
 │       ├── scaffolding-operator/       (29 files)
 │       ├── designing-operator-api/     (24 files)
