@@ -52,7 +52,9 @@ agentic-operator-poc/
 │       └── gap_analysis.md
 └── .claude/
     ├── settings.local.json
-    └── skills/                        # Skills built here (agents/ created in Sprint 6)
+    ├── agents/                        # Subagent definitions
+    │   └── operator-reviewer.md      # DONE — code review subagent
+    └── skills/                        # Skill implementations
         ├── scaffolding-operator/     # DONE — 29 files
         ├── designing-operator-api/   # DONE — 24 files
         ├── implementing-reconciliation/ # DONE — 19 files
@@ -109,7 +111,7 @@ These knowledgebase operators provide real patterns for templates and examples:
 
 ## Current Status
 
-Sprints 1-5 complete. `scaffolding-operator`, `designing-operator-api`, `implementing-reconciliation`, `testing-operator`, and `bundling-operator` skills built and validated.
+Sprints 1-6 complete. All 5 skills + `operator-reviewer` subagent built and validated.
 
 ### Completed
 - **Sprint 1**: `scaffolding-operator` — 29 files
@@ -143,5 +145,9 @@ Sprints 1-5 complete. `scaffolding-operator`, `designing-operator-api`, `impleme
   - Test 5.2 PASS: Version update v0.1.0→v0.2.0 (replaces, cronjobs RBAC, 3 backup descriptors, all scripts pass)
   - Test 5.3 PASS: SDK comparison (9 specDescriptors vs 0, 4 statusDescriptors vs 0, 11 RBAC rules vs 5)
 
+- **Sprint 6**: `operator-reviewer` — 1 agent definition (.claude/agents/operator-reviewer.md)
+  - Test 6.1 PASS: Reviewed flawed operator — all 5 planted issues detected (3 by scripts, 2 by manual inspection), 0 false positives
+  - Test 6.2 PASS: Reviewed clean database-operator — 0 false Critical findings, all 3 scripts PASS
+
 ### Next
-- Sprint 6: `operator-reviewer` (subagent)
+- Sprint 7: `operator-test-generator` (subagent)

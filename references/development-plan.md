@@ -270,63 +270,12 @@ Acceptance criteria:
 ## Sprint 6: `operator-reviewer` (Subagent)
 
 ### Build
-Create the subagent definition:
-```
-.claude/agents/operator-reviewer.md
-```
 
-Assigns skills: `implementing-reconciliation`, `designing-operator-api`
+1 agent definition at `.claude/agents/operator-reviewer.md`. Composes skills 2+3 (designing-operator-api + implementing-reconciliation). Runs 3 validation scripts + manual checklist. Produces structured review with severity, line numbers, and fix suggestions.
 
-### Unit Test
+See `tests/operator-reviewer/test_guide.md` for full test prompts (including flawed code to plant), verification commands, and acceptance criteria.
 
-**Test 6.1 — Review operator with known issues**
-
-First, create a deliberately flawed operator for the reviewer to catch.
-
-```
-Prompt: "Review the operator code at /tmp/redis-operator-test/ for best practices 
-and common mistakes. Check the controller, API types, and RBAC."
-```
-
-Plant these issues in the test operator before running:
-1. A reconcileService() that does `r.Create()` without checking if resource exists (non-idempotent)
-2. A reconcileConfigMap() missing `controllerutil.SetOwnerReference()` 
-3. An RBAC marker granting `*` verbs instead of least privilege
-4. Missing status condition update in error path
-5. Finalizer that doesn't re-fetch CR before removing
-
-Expected output: Structured review identifying all 5 planted issues with severity, line numbers, and fix suggestions.
-
-Acceptance criteria:
-- [ ] All 5 planted issues detected
-- [ ] Each issue has severity (Critical/Warning)
-- [ ] Each issue has line number reference
-- [ ] Each issue has a concrete fix suggestion
-- [ ] No false positives on correct code
-
-**Test 6.2 — Review clean operator**
-```
-Prompt: "Review the database-operator at go-operator/operators/database-operator/ 
-for best practices."
-```
-
-Acceptance criteria:
-- [ ] No false Critical findings on production code
-- [ ] Warnings are genuine improvement suggestions
-- [ ] Review completes without errors
-
-### Integration Test (Subagent + Skills 2+3)
-
-**Test I-6 — Review then fix**
-```
-Prompt: "Review the operator at /tmp/redis-operator-test/. For any Critical 
-findings, fix them using the implementing-reconciliation skill patterns."
-```
-
-Acceptance criteria:
-- [ ] Review identifies issues
-- [ ] Fixes follow patterns from implementing-reconciliation references
-- [ ] Re-review shows Critical issues resolved
+See `tests/operator-reviewer/gap_analysis.md` for comparison of automated vs manual review coverage.
 
 ---
 

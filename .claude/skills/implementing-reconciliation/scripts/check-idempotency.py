@@ -84,6 +84,21 @@ def main():
     if status_updates > 0:
         ok(f"Status updates: {status_updates}")
 
+    # Check for context.TODO() or context.Background() usage in reconciler methods
+    ctx_todo = re.findall(r'context\.TODO\(\)', content)
+    ctx_bg = re.findall(r'context\.Background\(\)', content)
+    bad_ctx = len(ctx_todo) + len(ctx_bg)
+    if bad_ctx > 0:
+        warn(f"context.TODO()/Background() used {bad_ctx} time(s) — use ctx parameter from Reconcile() instead")
+    else:
+        ok("No context.TODO()/Background() usage — correctly uses passed ctx")
+
+    # Check for boolean logic errors in error handling
+    bad_logic = re.findall(r'!(?:errors\.)?IsNotFound\([^)]+\)\s*\|\|\s*!(?:errors\.)?Is(?:Gone|NotFound)', content)
+    bad_logic += re.findall(r'!(?:errors\.)?IsGone\([^)]+\)\s*\|\|\s*!(?:errors\.)?Is(?:NotFound|Gone)', content)
+    if bad_logic:
+        warn(f"Possible boolean logic error: negated error checks combined with || instead of && ({len(bad_logic)} occurrence(s))")
+
     print(f"\n=== Results ===")
     if errors == 0:
         print(f"\033[0;32mPASSED: {errors} errors, {warnings} warnings\033[0m")
