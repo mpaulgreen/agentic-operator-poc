@@ -20,13 +20,17 @@ import (
 	"context"
 	"fmt"
 
+	"reflect"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	databasev1alpha1 "github.com/example/postgres-operator/api/v1alpha1"
@@ -183,15 +187,24 @@ func (r *PostgresClusterReconciler) reconcileStatefulSet(ctx context.Context, cr
 	existing := &appsv1.StatefulSet{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
 	if err == nil {
-		// Check-update: reconcile replicas if changed
+		// Check-update: reconcile replicas and affinity if changed
+		updated := false
 		if *existing.Spec.Replicas != cr.Spec.Replicas {
 			existing.Spec.Replicas = &cr.Spec.Replicas
+			updated = true
+		}
+		desiredAffinity := podAffinityForPostgresCluster(cr)
+		if !reflect.DeepEqual(existing.Spec.Template.Spec.Affinity, desiredAffinity) {
+			existing.Spec.Template.Spec.Affinity = desiredAffinity
+			updated = true
+		}
+		if updated {
 			if err := r.Update(ctx, existing); err != nil {
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "StatefulSetUpdateFailed", err.Error())
 				return err
 			}
 			r.Recorder.Event(cr, corev1.EventTypeNormal, "StatefulSetUpdated",
-				fmt.Sprintf("Updated replicas to %d", cr.Spec.Replicas))
+				fmt.Sprintf("Updated StatefulSet %s", cr.Name))
 		}
 		return nil
 	}
@@ -224,6 +237,7 @@ func (r *PostgresClusterReconciler) reconcileStatefulSet(ctx context.Context, cr
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					Affinity: podAffinityForPostgresCluster(cr),
 					Containers: []corev1.Container{
 						{
 							Name:  "postgresql",
@@ -406,4 +420,155 @@ func (r *PostgresClusterReconciler) reconcileCronJob(ctx context.Context, cr *da
 	r.Recorder.Event(cr, corev1.EventTypeNormal, "CronJobCreated", name)
 	setBackupReadyCondition(cr, "BackupConfigured", fmt.Sprintf("Backup CronJob created with schedule %s", cr.Spec.Backup.Schedule))
 	return nil
+}
+
+// reconcilePodDisruptionBudget ensures the PDB exists when HA is configured.
+// PDB name: <name>-pdb
+// Only created when spec.ha is non-nil.
+func (r *PostgresClusterReconciler) reconcilePodDisruptionBudget(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+	name := fmt.Sprintf("%s-pdb", cr.Name)
+
+	if cr.Spec.HA == nil {
+		existing := &policyv1.PodDisruptionBudget{}
+		err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
+		if err == nil {
+			if err := r.Delete(ctx, existing); err != nil {
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "PDBDeleteFailed", err.Error())
+				return err
+			}
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "PDBDeleted", name)
+			clearHAReadyCondition(cr, "HANotConfigured", "High availability is not configured")
+		}
+		return nil
+	}
+
+	// 1. CHECK if exists
+	existing := &policyv1.PodDisruptionBudget{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
+	if err == nil {
+		// Check-update: reconcile PDB spec if changed
+		updated := false
+		desiredMinAvail, desiredMaxUnavail := computePDBValues(cr)
+		if desiredMinAvail != nil {
+			val := intstr.FromInt32(*desiredMinAvail)
+			if existing.Spec.MinAvailable == nil || *existing.Spec.MinAvailable != val {
+				existing.Spec.MinAvailable = &val
+				existing.Spec.MaxUnavailable = nil
+				updated = true
+			}
+		} else if desiredMaxUnavail != nil {
+			val := intstr.FromInt32(*desiredMaxUnavail)
+			if existing.Spec.MaxUnavailable == nil || *existing.Spec.MaxUnavailable != val {
+				existing.Spec.MaxUnavailable = &val
+				existing.Spec.MinAvailable = nil
+				updated = true
+			}
+		}
+		if updated {
+			if err := r.Update(ctx, existing); err != nil {
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "PDBUpdateFailed", err.Error())
+				return err
+			}
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "PDBUpdated", name)
+		}
+		setHAReadyCondition(cr, "HAConfigured", "PodDisruptionBudget is configured")
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// 2. BUILD desired state
+	labels := labelsForPostgresCluster(cr)
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: cr.Namespace,
+			Labels:    labels,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	minAvail, maxUnavail := computePDBValues(cr)
+	if minAvail != nil {
+		val := intstr.FromInt32(*minAvail)
+		pdb.Spec.MinAvailable = &val
+	} else if maxUnavail != nil {
+		val := intstr.FromInt32(*maxUnavail)
+		pdb.Spec.MaxUnavailable = &val
+	}
+
+	// 3. SET OWNER REFERENCE
+	if err := controllerutil.SetControllerReference(cr, pdb, r.Scheme); err != nil {
+		return err
+	}
+
+	// 4. CREATE
+	if err := r.Create(ctx, pdb); err != nil {
+		r.Recorder.Event(cr, corev1.EventTypeWarning, "PDBFailed", err.Error())
+		return err
+	}
+
+	// 5. RECORD SUCCESS EVENT
+	r.Recorder.Event(cr, corev1.EventTypeNormal, "PDBCreated", name)
+	setHAReadyCondition(cr, "HAConfigured", "PodDisruptionBudget is configured")
+	return nil
+}
+
+func computePDBValues(cr *databasev1alpha1.PostgresCluster) (minAvailable *int32, maxUnavailable *int32) {
+	if cr.Spec.HA.MinAvailable != nil {
+		return cr.Spec.HA.MinAvailable, nil
+	}
+	if cr.Spec.HA.MaxUnavailable != nil {
+		return nil, cr.Spec.HA.MaxUnavailable
+	}
+	defaultMin := cr.Spec.Replicas - 1
+	if defaultMin < 1 {
+		defaultMin = 1
+	}
+	return &defaultMin, nil
+}
+
+// podAffinityForPostgresCluster returns pod anti-affinity based on HA settings. Returns nil when HA is nil.
+func podAffinityForPostgresCluster(cr *databasev1alpha1.PostgresCluster) *corev1.Affinity {
+	if cr.Spec.HA == nil {
+		return nil
+	}
+
+	labelSelector := &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app.kubernetes.io/instance": cr.Name,
+		},
+	}
+
+	if cr.Spec.HA.AntiAffinityMode == "required" {
+		return &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+					{
+						LabelSelector: labelSelector,
+						TopologyKey:   "kubernetes.io/hostname",
+					},
+				},
+			},
+		}
+	}
+
+	return &corev1.Affinity{
+		PodAntiAffinity: &corev1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+				{
+					Weight: 100,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						LabelSelector: labelSelector,
+						TopologyKey:   "kubernetes.io/hostname",
+					},
+				},
+			},
+		},
+	}
 }

@@ -35,6 +35,9 @@ const (
 
 	// ConditionBackupReady indicates the backup CronJob is configured and active.
 	ConditionBackupReady = "BackupReady"
+
+	// ConditionHAReady indicates the PodDisruptionBudget is configured for high availability.
+	ConditionHAReady = "HAReady"
 )
 
 // setCondition adds or updates a condition on the PostgresCluster status.
@@ -105,4 +108,12 @@ func setBackupReadyCondition(cr *databasev1alpha1.PostgresCluster, reason, messa
 // clearBackupReadyCondition sets the BackupReady condition to False.
 func clearBackupReadyCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionBackupReady, metav1.ConditionFalse, reason, message)
+}
+
+func setHAReadyCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+	setCondition(cr, ConditionHAReady, metav1.ConditionTrue, reason, message)
+}
+
+func clearHAReadyCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+	setCondition(cr, ConditionHAReady, metav1.ConditionFalse, reason, message)
 }

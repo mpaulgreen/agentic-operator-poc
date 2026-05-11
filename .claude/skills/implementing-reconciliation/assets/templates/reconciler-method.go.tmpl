@@ -7,7 +7,11 @@ func (r *{{KIND}}Reconciler) reconcile{{RESOURCE_KIND}}(ctx context.Context, cr 
 	existing := &{{RESOURCE_TYPE}}{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
 	if err == nil {
-		return nil // EXISTS — idempotent
+		// EXISTS — for immutable resources (Secret, ConfigMap, Service), return nil.
+		// For mutable resources (StatefulSet, Deployment), compare spec fields and
+		// call r.Update() if changed. See references/idempotency-patterns.md
+		// "Check-Update for Complex Fields".
+		return nil
 	}
 	if !errors.IsNotFound(err) {
 		return err // ACTUAL ERROR

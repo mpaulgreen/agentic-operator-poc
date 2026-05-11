@@ -79,6 +79,23 @@ def main():
     if updates > 0:
         ok(f"Update() calls: {updates}")
 
+    # Check that mutable resources have field comparisons before Update()
+    # For each reconciler method with r.Update(), check it also has field comparison logic
+    for method in methods:
+        # Extract method body (rough heuristic: from method name to next "func " or EOF)
+        method_pattern = rf'func \(r \*\w+\) {method}\(.*?\n(.*?)(?=\nfunc |\Z)'
+        method_match = re.search(method_pattern, content, re.DOTALL)
+        if method_match:
+            method_body = method_match.group(1)
+            has_update = 'r.Update(' in method_body
+            has_create = 'r.Create(' in method_body
+            if has_update and has_create:
+                # Count field comparisons (!=, DeepEqual, Equal patterns)
+                comparisons = len(re.findall(r'!=|DeepEqual|Equal\(', method_body))
+                # Count field assignments in builder section (after "BUILD" comment or resource construction)
+                if comparisons < 1:
+                    warn(f"{method}() has Update() but no field comparisons — mutable fields may not be reconciled")
+
     # Check for status updates
     status_updates = len(re.findall(r'r\.Status\(\)\.Update\(', content))
     if status_updates > 0:

@@ -37,6 +37,44 @@ if *existing.Spec.Replicas != cr.Spec.Replicas {
 Use check-update for: StatefulSet replicas, Deployment image, ConfigMap data.
 Use check-create only for: Secrets (credentials shouldn't change), Services (selectors are immutable).
 
+## Check-Update for Complex Fields
+
+When updating nested structs (affinity, tolerations, volumes, env vars), field-by-field comparison is fragile. Use `reflect.DeepEqual` via a helper:
+
+```go
+// Helper for comparing complex fields
+func affinityEqual(a, b *corev1.Affinity) bool {
+    if a == nil && b == nil { return true }
+    if a == nil || b == nil { return false }
+    return reflect.DeepEqual(a, b)
+}
+```
+
+Batch multiple field comparisons into a single Update call:
+
+```go
+existing := &appsv1.StatefulSet{}
+err := r.Get(ctx, key, existing)
+if err == nil {
+    updated := false
+    if *existing.Spec.Replicas != cr.Spec.Replicas {
+        existing.Spec.Replicas = &cr.Spec.Replicas
+        updated = true
+    }
+    desiredAffinity := podAffinityForCluster(cr)
+    if !affinityEqual(existing.Spec.Template.Spec.Affinity, desiredAffinity) {
+        existing.Spec.Template.Spec.Affinity = desiredAffinity
+        updated = true
+    }
+    if updated {
+        return r.Update(ctx, existing)
+    }
+    return nil
+}
+```
+
+**Key rule**: When you modify a builder to add a new field (e.g., Affinity), you must ALSO add a comparison for that field in the check-update section. Otherwise the field is only set on creation and never applied to existing resources.
+
 ## Server-Side Apply (Modern Alternative)
 
 SSA reconstructs desired state from scratch each reconciliation:

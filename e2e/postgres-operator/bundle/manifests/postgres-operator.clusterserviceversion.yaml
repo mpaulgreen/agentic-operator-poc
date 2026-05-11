@@ -34,6 +34,10 @@ metadata:
               "enabled": true,
               "schedule": "0 2 * * *",
               "retentionDays": 7
+            },
+            "ha": {
+              "minAvailable": 2,
+              "antiAffinityMode": "preferred"
             }
           }
         }
@@ -45,7 +49,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/postgres-operator
-  name: postgres-operator.v0.1.0
+  name: postgres-operator.v0.2.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -67,6 +71,8 @@ spec:
         version: v1
       - kind: CronJob
         version: v1
+      - kind: PodDisruptionBudget
+        version: v1
       specDescriptors:
       - path: replicas
         displayName: Replicas
@@ -83,6 +89,18 @@ spec:
       - path: backup
         displayName: Backup
         description: Backup configuration
+      - path: ha
+        displayName: High Availability
+        description: High availability configuration with PodDisruptionBudget and anti-affinity
+      - path: ha.minAvailable
+        displayName: Min Available
+        description: Minimum number of pods that must remain available during disruption
+      - path: ha.maxUnavailable
+        displayName: Max Unavailable
+        description: Maximum number of pods that can be unavailable during disruption
+      - path: ha.antiAffinityMode
+        displayName: Anti-Affinity Mode
+        description: Pod anti-affinity mode (preferred or required)
       statusDescriptors:
       - path: phase
         displayName: Phase
@@ -104,7 +122,7 @@ spec:
     The PostgreSQL Operator manages PostgreSQL clusters on Kubernetes.
     It automates deployment, scaling, backup, and lifecycle management of
     PostgreSQL instances using StatefulSets, Services, Secrets, ConfigMaps,
-    and CronJobs for scheduled backups.
+    CronJobs for scheduled backups, and PodDisruptionBudgets for high availability.
   displayName: PostgreSQL Operator
   icon:
   - base64data: ""
@@ -206,6 +224,18 @@ spec:
           - update
           - patch
           - delete
+        - apiGroups:
+          - policy
+          resources:
+          - poddisruptionbudgets
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
         serviceAccountName: postgres-operator-controller-manager
       deployments:
       - label:
@@ -234,7 +264,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/postgres-operator:v0.1.0
+                image: quay.io/mpaulgreen/postgres-operator:v0.2.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -326,4 +356,5 @@ spec:
   provider:
     name: Example
     url: https://example.com
-  version: 0.1.0
+  replaces: postgres-operator.v0.1.0
+  version: 0.2.0

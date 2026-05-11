@@ -24,6 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -56,6 +57,7 @@ type PostgresClusterReconciler struct {
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -115,6 +117,10 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return r.handleError(ctx, cr, "CronJobReconcileFailed", err)
 	}
 
+	if err := r.reconcilePodDisruptionBudget(ctx, cr); err != nil {
+		return r.handleError(ctx, cr, "PDBReconcileFailed", err)
+	}
+
 	// --- PHASE 3: STATUS ---
 	if err := r.updateStatus(ctx, cr); err != nil {
 		logger.Error(err, "Failed to update status")
@@ -172,5 +178,6 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&batchv1.CronJob{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		Complete(r)
 }

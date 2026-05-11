@@ -99,13 +99,15 @@ Use when the user has an existing bundle and needs to update it for a new operat
 
 3. **Add new RBAC entries** for any new resources the controller now manages.
 
-4. **Add new descriptors** for any new Spec/Status fields added to the CRD.
+4. **Refresh the CRD manifest** — copy the updated CRD from `config/crd/bases/<group>_<plural>.yaml` to `bundle/manifests/<group>_<plural>.yaml`. This is critical when types changed (new fields, markers, nested types) — the bundle CRD is a separate copy and won't pick up changes automatically. Run `make manifests` first if the CRD hasn't been regenerated.
 
-5. **Update alm-examples** to include new fields with sensible defaults.
+5. **Add new descriptors** for any new Spec/Status fields added to the CRD.
 
-6. **Preserve all unchanged sections** — do not remove existing RBAC rules, descriptors, or annotations.
+6. **Update alm-examples** to include new fields with sensible defaults.
 
-7. **Verify** with all three validation scripts.
+7. **Preserve all unchanged sections** — do not remove existing RBAC rules, descriptors, or annotations.
+
+8. **Verify** with all three validation scripts.
 
 ## RBAC Mapping: Controller Markers → CSV
 

@@ -362,88 +362,131 @@ Output at `e2e/postgres-operator/`. OpenShift validation guide at `e2e/openshift
 
 ---
 
-### Scenario B: Add Feature to Existing Operator
+### Scenario B: Add High Availability (designing-operator-api Workflow B)
 
-Uses the database-operator from the knowledgebase as the target.
+Builds on the postgres-operator from Scenario A at `e2e/postgres-operator/`. Adds PodDisruptionBudget (policy/v1) + pod anti-affinity. Tests all 4 non-scaffolding skills in Workflow B + all 3 subagents.
 
 ```
-Prompt: "Add backup support to the existing database operator at 
-go-operator/operators/database-operator/. 
+Prompt: "Add High Availability support to the existing PostgreSQL operator at e2e/postgres-operator/.
 
-1. Add to the CRD: BackupSpec with schedule (cron string), 
-   retentionDays (int, 1-30, default 7), destination (s3/local, default local)
-2. Add to Status: BackupStatus with lastBackup (timestamp), 
-   lastBackupResult (Success/Failed), add BackupReady condition
-3. Add reconcileCronJob() to the controller for scheduled pg_dump
-4. Generate tests for the new reconciler method
-5. Update the OLM bundle from current version to next version with 
-   'replaces' set correctly"
-```
-
-Verification:
-```bash
-# Types still compile with additions
-cd go-operator/operators/database-operator && go build ./api/...
-
-# Controller still compiles with new reconciler
-go build ./internal/controller/...
-
-# New tests compile and existing tests still pass
-make test
-
-# Bundle valid
-python3 .claude/skills/bundling-operator/scripts/validate-csv.py bundle/manifests/*.clusterserviceversion.yaml
+1. Add to the CRD: HASpec with minAvailable (*int32, min 1), 
+   maxUnavailable (*int32, min 1, mutually exclusive with minAvailable),
+   antiAffinityMode (string enum preferred/required, default preferred)
+2. Add to Status: HAReady condition
+3. Add reconcilePodDisruptionBudget() — creates PDB from policy/v1 
+   when spec.ha is non-nil, uses minAvailable or maxUnavailable from spec,
+   defaults to minAvailable=replicas-1 when neither is set
+4. Update reconcileStatefulSet() to add pod anti-affinity based on 
+   antiAffinityMode when spec.ha is non-nil
+5. Generate tests for the new reconciler method
+6. Update the OLM bundle from v0.1.0 to v0.2.0 with replaces set correctly"
 ```
 
 Acceptance criteria:
-- [ ] Existing code unchanged except for additions
-- [ ] New types integrate with existing Spec/Status
-- [ ] New reconciler follows same pattern as existing ones
-- [ ] Tests added for new method only
-- [ ] CSV version incremented with `replaces` set
-- [ ] New descriptors added without removing existing ones
+- [ ] HASpec struct with minAvailable, maxUnavailable, antiAffinityMode fields and markers
+- [ ] reconcilePodDisruptionBudget() follows check-create idempotency pattern
+- [ ] PDB only created when spec.ha is non-nil
+- [ ] Anti-affinity added to StatefulSet PodTemplateSpec
+- [ ] HAReady condition helpers added
+- [ ] RBAC for policy/poddisruptionbudgets, Owns PDB
+- [ ] ~5 PDB test cases, all existing tests pass
+- [ ] CSV v0.2.0 with replaces v0.1.0, PDB RBAC + descriptors
+- [ ] Code review: 0 Critical, bundle validates
 
 ---
 
-### Scenario C: Review Existing Operator
+### Scenario C: Webhooks + Network Security (designing-operator-api Workflow C)
+
+Builds on Scenario B (v0.2.0). Adds defaulting/validating webhooks + NetworkPolicy (networking.k8s.io/v1). Tests designing-api Workflow C + implementing-reconciliation Workflow B + all 3 subagents.
+
+**Prerequisite**: cert-manager operator on OpenShift.
 
 ```
-Prompt: "Perform a comprehensive review of the operator at 
-go-operator/operators/database-operator/. Check:
-1. API types for missing markers, incorrect validation
-2. Controller for idempotency violations, missing owner refs, RBAC issues
-3. Tests for coverage gaps
-4. Bundle for CSV completeness and certification readiness
+Prompt: "Add admission webhooks and network security to the PostgreSQL operator at
+e2e/postgres-operator/ (which already has HA support at v0.2.0).
 
-Produce a structured report with findings and recommended fixes."
+1. Add webhooks (designing-operator-api Workflow C):
+   Defaulting: set replicas=3 when 0, version=16 when empty,
+   antiAffinityMode=preferred when ha is nil,
+   minAvailable=replicas-1 when ha set but neither field specified
+   Validating: reject minAvailable >= replicas, reject both 
+   minAvailable and maxUnavailable set, reject backup.enabled 
+   without schedule, reject storage size reduction on update
+2. Generate all webhook config files (service, cert-manager, patches)
+3. Update main.go and kustomization files
+4. Add reconcileNetworkPolicy() — creates NetworkPolicy from 
+   networking.k8s.io/v1, allows port 5432 ingress from same namespace,
+   allows DNS egress, always created (security baseline)
+5. Add NetworkSecured condition
+6. Generate tests for NetworkPolicy + webhook validation
+7. Update OLM bundle from v0.2.0 to v0.3.0 with webhook definitions"
 ```
 
 Acceptance criteria:
-- [ ] Review covers all 4 areas (types, controller, tests, bundle)
-- [ ] Findings categorized by severity
-- [ ] Each finding has file path and line number
-- [ ] Fix recommendations reference specific skill patterns
-- [ ] No false Critical findings on working production code
+- [ ] Webhook handler with Default() + ValidateCreate/Update/Delete()
+- [ ] 9 webhook config files + kustomization updates
+- [ ] reconcileNetworkPolicy() follows check-create pattern
+- [ ] NetworkPolicy allows port 5432 ingress, DNS egress
+- [ ] ~9 webhook + ~2 NP test cases, all existing tests pass
+- [ ] CSV v0.3.0 with replaces v0.2.0, webhookdefinitions, NP RBAC
+- [ ] Code review: 0 Critical, bundle validates
 
 ---
 
-### Scenario D: Prepare for Certification
+### Scenario D: API Maturity + Connection Pooling (designing-operator-api Workflow D)
+
+Builds on Scenario C (v0.3.0). Promotes API to v1beta1 + adds PgBouncer Deployment (apps/v1). Tests designing-api Workflow D + implementing-reconciliation Workflow B + all 3 subagents.
 
 ```
-Prompt: "Prepare the redis-operator for Red Hat certification. 
-1. Validate the bundle structure and CSV
-2. Check certification prerequisites (icon, description, examples, test config)
-3. Check security requirements (non-root, read-only fs, minimal capabilities)
-4. Check RBAC for least privilege
-5. Generate a certification readiness report with pass/fail for each requirement"
+Prompt: "Promote the PostgreSQL operator API to v1beta1 and add connection pooling
+at e2e/postgres-operator/ (which already has HA + webhooks at v0.3.0).
+
+1. Add API version v1beta1 (designing-operator-api Workflow D):
+   Copy types to api/v1beta1/, add +kubebuilder:storageversion,
+   add new fields: maxMemory (*resource.Quantity), 
+   connectionPool (*ConnectionPoolSpec)
+   ConnectionPoolSpec: enabled (bool), poolSize (int32, 1-100, default 10),
+   maxClientConnections (int32, 1-1000, default 100),
+   idleTimeout (string, default 30s)
+   Add to status: poolerReady (bool), poolerEndpoint (string),
+   ConnectionPoolReady condition
+2. Update main.go for v1beta1 scheme + webhook registration
+3. Add reconcileConnectionPool() — creates Deployment (apps/v1) for 
+   PgBouncer + ClusterIP Service on port 6432 when enabled,
+   deletes both when disabled
+4. Generate tests for connection pool reconciler + v1beta1 webhook
+5. Update OLM bundle from v0.3.0 to v0.4.0 with multi-version CRD,
+   maturity alpha→beta"
 ```
 
 Acceptance criteria:
-- [ ] Each certification requirement checked individually
-- [ ] Clear pass/fail per requirement
-- [ ] Actionable remediation steps for each failure
-- [ ] Security posture verified (Dockerfile, RBAC, SCC)
-- [ ] Bundle passes all validation scripts
+- [ ] api/v1beta1/ directory with groupversion_info.go, types.go, deepcopy, webhook
+- [ ] v1beta1 has +kubebuilder:storageversion, v1alpha1 does not
+- [ ] ConnectionPoolSpec with enabled, poolSize, maxClientConnections, idleTimeout
+- [ ] reconcileConnectionPool() creates Deployment + Service when enabled, deletes when disabled
+- [ ] ~8 connection pool + webhook test cases, all existing tests pass
+- [ ] CSV v0.4.0 with replaces v0.3.0, multi-version CRD, maturity=beta
+- [ ] Code review: 0 Critical, bundle validates
+
+---
+
+## Coverage Matrix
+
+| Scenario | designing-api | implementing-reconciliation | bundling | test-generator | reviewer | bundle-validator | New Resource |
+|----------|--------------|---------------------------|----------|----------------|----------|-----------------|-------------|
+| A (done) | Workflow A | Workflow A | Workflow A | Full | Full | Full | StatefulSet, Service, Secret, ConfigMap, CronJob |
+| B | Workflow B | Workflow B | Workflow B | Workflow B | Full | Full | PodDisruptionBudget (policy/v1) |
+| C | Workflow C | Workflow B | Workflow B | Workflow B | Full | Full | NetworkPolicy (networking.k8s.io/v1) |
+| D | Workflow D | Workflow B | Workflow B | Workflow B | Full | Full | Deployment (apps/v1) |
+
+## Version Chain
+
+| Scenario | Bundle | Replaces | Maturity | API Versions |
+|----------|--------|----------|----------|-------------|
+| A | 0.1.0 | — | alpha | v1alpha1 |
+| B | 0.2.0 | 0.1.0 | alpha | v1alpha1 |
+| C | 0.3.0 | 0.2.0 | alpha | v1alpha1 |
+| D | 0.4.0 | 0.3.0 | beta | v1alpha1 + v1beta1 (storage) |
 
 ---
 
@@ -452,13 +495,13 @@ Acceptance criteria:
 | Sprint | Component | Unit Tests | Integration Tests | Scenario Coverage |
 |--------|-----------|-----------|-------------------|-------------------|
 | 1 | scaffolding-operator | 1.1, 1.2 | — | A |
-| 2 | designing-operator-api | 2.1, 2.2 | I-1.2 | A, B |
-| 3 | implementing-reconciliation | 3.1, 3.2 | I-1.2.3 | A, B |
-| 4 | testing-operator | 4.1, 4.2 | I-1.2.3.4 | A, B |
-| 5 | bundling-operator | 5.1, 5.2 | I-1.2.3.4.5 | A, B, D |
-| 6 | operator-reviewer | 6.1, 6.2 | I-6 | C |
-| 7 | operator-test-generator | 7.1, 7.2 | I-7 | A, B |
-| 8 | operator-bundle-validator | 8.1, 8.2 | I-8 | D |
+| 2 | designing-operator-api | 2.1, 2.2 | I-1.2 | A, B, C, D |
+| 3 | implementing-reconciliation | 3.1, 3.2 | I-1.2.3 | A, B, C, D |
+| 4 | testing-operator | 4.1, 4.2 | I-1.2.3.4 | A, B, C, D |
+| 5 | bundling-operator | 5.1, 5.2 | I-1.2.3.4.5 | A, B, C, D |
+| 6 | operator-reviewer | 6.1, 6.2 | I-6 | A, B, C, D |
+| 7 | operator-test-generator | 7.1, 7.2 | I-7 | A, B, C, D |
+| 8 | operator-bundle-validator | 8.1, 8.2 | I-8 | A, B, C, D |
 | Final | All components | — | — | A, B, C, D |
 
 **Total**: 16 unit tests + 7 integration tests + 4 E2E scenario tests = **27 test points**

@@ -84,6 +84,8 @@ Check these patterns that automated scripts don't fully catch:
 - Every `r.Create()` call is preceded by `r.Get()` with `errors.IsNotFound()` guard
 - No direct `r.Create()` without the check-create pattern
 - Pattern: `Get → if err == nil { return nil } → if !IsNotFound(err) { return err } → Build → SetOwnerRef → Create → Event`
+- For reconcilers with `r.Update()` (mutable resources like StatefulSet, Deployment): verify that ALL spec fields set in the builder are also compared in the check-update section. A field set during creation but not compared during update means it is never applied to existing resources when the CR spec changes.
+- Common miss: adding a new field to a builder (e.g., Affinity) without adding a comparison in the update path
 
 **Owner References** (Critical if missing):
 - Every created resource calls `controllerutil.SetControllerReference(cr, resource, r.Scheme)`

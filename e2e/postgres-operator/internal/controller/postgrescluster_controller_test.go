@@ -27,8 +27,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -631,6 +633,134 @@ var _ = Describe("PostgresCluster Controller", func() {
 	})
 
 	// ============================================================
+	// PodDisruptionBudget Tests
+	// ============================================================
+	Context("When reconciling PodDisruptionBudget", func() {
+		var (
+			ctx        context.Context
+			cr         *databasev1alpha1.PostgresCluster
+			reconciler *PostgresClusterReconciler
+			name       string
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			namespace = fmt.Sprintf("test-pdb-%d", time.Now().UnixNano())
+			name = "pg-pdb-test"
+
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			cr = &databasev1alpha1.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+				},
+				Spec: databasev1alpha1.PostgresClusterSpec{
+					Replicas: 3,
+					Version:  "16",
+					Storage:  databasev1alpha1.StorageSpec{Size: "1Gi"},
+					HA: &databasev1alpha1.HASpec{
+						MinAvailable:     int32Ptr(2),
+						AntiAffinityMode: "preferred",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+			reconciler = &PostgresClusterReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+		})
+
+		AfterEach(func() {
+			_ = k8sClient.Delete(ctx, cr)
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			_ = k8sClient.Delete(ctx, ns)
+		})
+
+		It("should create PDB with minAvailable when ha.minAvailable is set", func() {
+			Expect(reconciler.reconcilePodDisruptionBudget(ctx, cr)).To(Succeed())
+
+			pdb := &policyv1.PodDisruptionBudget{}
+			pdbKey := types.NamespacedName{Name: fmt.Sprintf("%s-pdb", name), Namespace: namespace}
+			Expect(k8sClient.Get(ctx, pdbKey, pdb)).To(Succeed())
+
+			expectedMin := intstr.FromInt32(2)
+			Expect(pdb.Spec.MinAvailable).To(Equal(&expectedMin))
+			Expect(pdb.Spec.MaxUnavailable).To(BeNil())
+
+			Expect(pdb.OwnerReferences).To(HaveLen(1))
+			Expect(pdb.OwnerReferences[0].Name).To(Equal(name))
+
+			Expect(pdb.Spec.Selector.MatchLabels).To(HaveKeyWithValue("app.kubernetes.io/instance", name))
+		})
+
+		It("should create PDB with maxUnavailable when ha.maxUnavailable is set", func() {
+			cr.Spec.HA = &databasev1alpha1.HASpec{
+				MaxUnavailable:   int32Ptr(1),
+				AntiAffinityMode: "preferred",
+			}
+			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
+			Expect(reconciler.reconcilePodDisruptionBudget(ctx, cr)).To(Succeed())
+
+			pdb := &policyv1.PodDisruptionBudget{}
+			pdbKey := types.NamespacedName{Name: fmt.Sprintf("%s-pdb", name), Namespace: namespace}
+			Expect(k8sClient.Get(ctx, pdbKey, pdb)).To(Succeed())
+
+			expectedMax := intstr.FromInt32(1)
+			Expect(pdb.Spec.MaxUnavailable).To(Equal(&expectedMax))
+			Expect(pdb.Spec.MinAvailable).To(BeNil())
+		})
+
+		It("should not create PDB when ha is nil", func() {
+			cr.Spec.HA = nil
+			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
+			Expect(reconciler.reconcilePodDisruptionBudget(ctx, cr)).To(Succeed())
+
+			pdb := &policyv1.PodDisruptionBudget{}
+			pdbKey := types.NamespacedName{Name: fmt.Sprintf("%s-pdb", name), Namespace: namespace}
+			err := k8sClient.Get(ctx, pdbKey, pdb)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+
+		It("should not recreate existing PDB (idempotent)", func() {
+			Expect(reconciler.reconcilePodDisruptionBudget(ctx, cr)).To(Succeed())
+
+			pdb := &policyv1.PodDisruptionBudget{}
+			pdbKey := types.NamespacedName{Name: fmt.Sprintf("%s-pdb", name), Namespace: namespace}
+			Expect(k8sClient.Get(ctx, pdbKey, pdb)).To(Succeed())
+			originalVersion := pdb.ResourceVersion
+
+			Expect(reconciler.reconcilePodDisruptionBudget(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, pdbKey, pdb)).To(Succeed())
+			Expect(pdb.ResourceVersion).To(Equal(originalVersion))
+		})
+
+		It("should update PDB when ha spec changes", func() {
+			Expect(reconciler.reconcilePodDisruptionBudget(ctx, cr)).To(Succeed())
+
+			pdb := &policyv1.PodDisruptionBudget{}
+			pdbKey := types.NamespacedName{Name: fmt.Sprintf("%s-pdb", name), Namespace: namespace}
+			Expect(k8sClient.Get(ctx, pdbKey, pdb)).To(Succeed())
+			originalVersion := pdb.ResourceVersion
+
+			cr.Spec.HA.MinAvailable = int32Ptr(1)
+			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
+			Expect(reconciler.reconcilePodDisruptionBudget(ctx, cr)).To(Succeed())
+
+			Expect(k8sClient.Get(ctx, pdbKey, pdb)).To(Succeed())
+			Expect(pdb.ResourceVersion).NotTo(Equal(originalVersion))
+			expectedMin := intstr.FromInt32(1)
+			Expect(pdb.Spec.MinAvailable).To(Equal(&expectedMin))
+		})
+	})
+
+	// ============================================================
 	// Helper Function Tests
 	// ============================================================
 	Context("When testing helper functions", func() {
@@ -672,3 +802,5 @@ var _ = Describe("PostgresCluster Controller", func() {
 		})
 	})
 })
+
+func int32Ptr(i int32) *int32 { return &i }

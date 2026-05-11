@@ -72,6 +72,32 @@ spec:
                 required:
                 - schedule
                 type: object
+              ha:
+                description: HA defines the optional high availability configuration.
+                properties:
+                  antiAffinityMode:
+                    default: preferred
+                    description: AntiAffinityMode controls how pod anti-affinity is
+                      configured.
+                    enum:
+                    - preferred
+                    - required
+                    type: string
+                  maxUnavailable:
+                    description: |-
+                      MaxUnavailable is the maximum number of pods that can be unavailable during disruption.
+                      Mutually exclusive with MinAvailable.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  minAvailable:
+                    description: |-
+                      MinAvailable is the minimum number of pods that must remain available during disruption.
+                      Mutually exclusive with MaxUnavailable.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                type: object
               replicas:
                 default: 3
                 description: Replicas is the number of PostgreSQL instances to run.

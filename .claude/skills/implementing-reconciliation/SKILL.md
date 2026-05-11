@@ -77,9 +77,11 @@ Use when the user has a scaffolded controller stub and needs the full reconcilia
 
 7. **Verify** with `scripts/validate-rbac-annotations.py` and `scripts/check-idempotency.py`.
 
-## Workflow B: Add Resource to Existing Controller
+## Workflow B: Add or Modify Resources in Existing Controller
 
-Use when the user wants to add a new reconciled resource (e.g., "add a ConfigMap for redis.conf").
+Use when the user wants to add a new reconciled resource or modify what an existing reconciler produces.
+
+**Adding a new resource** (e.g., "add a ConfigMap for redis.conf"):
 
 1. Add new `reconcileX()` method following the same check-create pattern as existing methods.
 2. Add a resource builder function (e.g., `configMapForCluster()`).
@@ -87,6 +89,12 @@ Use when the user wants to add a new reconciled resource (e.g., "add a ConfigMap
 4. Add RBAC annotation for the new resource type.
 5. Add `Owns(&corev1.ConfigMap{})` to `SetupWithManager()`.
 6. Update status if the new resource affects status.
+
+**Modifying an existing reconciler** (e.g., "add anti-affinity to the StatefulSet"):
+
+7. If you change what the builder produces (e.g., adding affinity, tolerations, volumes, env vars to the StatefulSet template), you **must also update the check-update section** to compare all changed fields on existing resources. Otherwise the new fields are only set during creation and never applied to already-running resources.
+8. For complex nested fields (affinity, tolerations, volumes), use a helper with `reflect.DeepEqual` or struct comparison — see `references/idempotency-patterns.md` "Check-Update for Complex Fields".
+9. Batch multiple field comparisons into a single `r.Update()` call to avoid unnecessary API calls.
 
 ## Check-Create Idempotency Pattern
 

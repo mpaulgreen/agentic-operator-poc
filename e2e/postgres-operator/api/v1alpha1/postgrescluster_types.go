@@ -44,6 +44,10 @@ type PostgresClusterSpec struct {
 	// Backup defines the optional backup configuration.
 	// +optional
 	Backup *BackupSpec `json:"backup,omitempty"`
+
+	// HA defines the optional high availability configuration.
+	// +optional
+	HA *HASpec `json:"ha,omitempty"`
 }
 
 // StorageSpec defines storage configuration for PostgreSQL data.
@@ -71,6 +75,26 @@ type BackupSpec struct {
 	// +kubebuilder:validation:Maximum=30
 	// +kubebuilder:default=7
 	RetentionDays int32 `json:"retentionDays,omitempty"`
+}
+
+// HASpec defines high availability configuration for PostgreSQL.
+type HASpec struct {
+	// MinAvailable is the minimum number of pods that must remain available during disruption.
+	// Mutually exclusive with MaxUnavailable.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	MinAvailable *int32 `json:"minAvailable,omitempty"`
+
+	// MaxUnavailable is the maximum number of pods that can be unavailable during disruption.
+	// Mutually exclusive with MinAvailable.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	MaxUnavailable *int32 `json:"maxUnavailable,omitempty"`
+
+	// AntiAffinityMode controls how pod anti-affinity is configured.
+	// +kubebuilder:validation:Enum="preferred";"required"
+	// +kubebuilder:default="preferred"
+	AntiAffinityMode string `json:"antiAffinityMode,omitempty"`
 }
 
 // PostgresClusterStatus defines the observed state of PostgresCluster.
