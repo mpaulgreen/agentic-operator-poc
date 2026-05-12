@@ -5,7 +5,7 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "database.postgres.example.com/v1alpha1",
+          "apiVersion": "database.postgres.example.com/v1beta1",
           "kind": "PostgresCluster",
           "metadata": {
             "labels": {
@@ -38,6 +38,12 @@ metadata:
             "ha": {
               "minAvailable": 2,
               "antiAffinityMode": "preferred"
+            },
+            "connectionPool": {
+              "enabled": true,
+              "poolSize": 10,
+              "maxClientConnections": 100,
+              "idleTimeout": "30s"
             }
           }
         }
@@ -49,7 +55,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/postgres-operator
-  name: postgres-operator.v0.3.0
+  name: postgres-operator.v0.4.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -59,7 +65,7 @@ spec:
       displayName: Postgres Cluster
       kind: PostgresCluster
       name: postgresclusters.database.postgres.example.com
-      version: v1alpha1
+      version: v1beta1
       resources:
       - kind: StatefulSet
         version: v1
@@ -74,6 +80,8 @@ spec:
       - kind: PodDisruptionBudget
         version: v1
       - kind: NetworkPolicy
+        version: v1
+      - kind: Deployment
         version: v1
       specDescriptors:
       - path: replicas
@@ -103,6 +111,24 @@ spec:
       - path: ha.antiAffinityMode
         displayName: Anti-Affinity Mode
         description: Pod anti-affinity mode (preferred or required)
+      - path: maxMemory
+        displayName: Max Memory
+        description: Maximum memory for PostgreSQL shared_buffers auto-tuning
+      - path: connectionPool
+        displayName: Connection Pool
+        description: PgBouncer connection pooling configuration
+      - path: connectionPool.enabled
+        displayName: Enabled
+        description: Enable PgBouncer connection pooling
+      - path: connectionPool.poolSize
+        displayName: Pool Size
+        description: Default pool size per user/database pair
+      - path: connectionPool.maxClientConnections
+        displayName: Max Client Connections
+        description: Maximum number of client connections
+      - path: connectionPool.idleTimeout
+        displayName: Idle Timeout
+        description: Idle connection timeout
       statusDescriptors:
       - path: phase
         displayName: Phase
@@ -119,13 +145,19 @@ spec:
       - path: conditions
         displayName: Conditions
         description: Latest available observations of the resource state
+      - path: poolerReady
+        displayName: Pooler Ready
+        description: Whether the PgBouncer connection pooler is ready
+      - path: poolerEndpoint
+        displayName: Pooler Endpoint
+        description: Connection endpoint for the PgBouncer pooler
   description: |
     ## Overview
     The PostgreSQL Operator manages PostgreSQL clusters on Kubernetes.
     It automates deployment, scaling, backup, and lifecycle management of
     PostgreSQL instances using StatefulSets, Services, Secrets, ConfigMaps,
     CronJobs for scheduled backups, PodDisruptionBudgets for high availability,
-    and NetworkPolicies for database isolation.
+    NetworkPolicies for database isolation, and PgBouncer Deployments for connection pooling.
   displayName: PostgreSQL Operator
   icon:
   - base64data: ""
@@ -251,6 +283,18 @@ spec:
           - update
           - patch
           - delete
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
         serviceAccountName: postgres-operator-controller-manager
       deployments:
       - label:
@@ -279,7 +323,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/postgres-operator:v0.3.0
+                image: quay.io/mpaulgreen/postgres-operator:v0.4.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -366,25 +410,25 @@ spec:
   maintainers:
   - email: maintainer@example.com
     name: Maintainer
-  maturity: alpha
+  maturity: beta
   minKubeVersion: "1.25.0"
   provider:
     name: Example
     url: https://example.com
-  replaces: postgres-operator.v0.2.0
-  version: 0.3.0
+  replaces: postgres-operator.v0.3.0
+  version: 0.4.0
   webhookdefinitions:
   - admissionReviewVersions:
     - v1
     containerPort: 9443
     deploymentName: postgres-operator-controller-manager
     failurePolicy: Fail
-    generateName: mpostgrescluster.kb.io
+    generateName: mpostgresclusterv1beta1.kb.io
     rules:
     - apiGroups:
       - database.postgres.example.com
       apiVersions:
-      - v1alpha1
+      - v1beta1
       operations:
       - CREATE
       - UPDATE
@@ -393,18 +437,18 @@ spec:
     sideEffects: None
     targetPort: 9443
     type: MutatingAdmissionWebhook
-    webhookPath: /mutate-database-postgres-example-com-v1alpha1-postgrescluster
+    webhookPath: /mutate-database-postgres-example-com-v1beta1-postgrescluster
   - admissionReviewVersions:
     - v1
     containerPort: 9443
     deploymentName: postgres-operator-controller-manager
     failurePolicy: Fail
-    generateName: vpostgrescluster.kb.io
+    generateName: vpostgresclusterv1beta1.kb.io
     rules:
     - apiGroups:
       - database.postgres.example.com
       apiVersions:
-      - v1alpha1
+      - v1beta1
       operations:
       - CREATE
       - UPDATE
@@ -413,4 +457,4 @@ spec:
     sideEffects: None
     targetPort: 9443
     type: ValidatingAdmissionWebhook
-    webhookPath: /validate-database-postgres-example-com-v1alpha1-postgrescluster
+    webhookPath: /validate-database-postgres-example-com-v1beta1-postgrescluster

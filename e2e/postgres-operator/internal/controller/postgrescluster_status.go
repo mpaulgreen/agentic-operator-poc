@@ -24,11 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
-	databasev1alpha1 "github.com/example/postgres-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/postgres-operator/api/v1beta1"
 )
 
 // updateStatus fetches the StatefulSet and updates the PostgresCluster status accordingly.
-func (r *PostgresClusterReconciler) updateStatus(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+func (r *PostgresClusterReconciler) updateStatus(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
 	// Fetch the StatefulSet to read its status
 	sts := &appsv1.StatefulSet{}
 	err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, sts)
@@ -56,7 +56,7 @@ func (r *PostgresClusterReconciler) updateStatus(ctx context.Context, cr *databa
 }
 
 // updatePhase sets the phase and conditions based on StatefulSet readiness.
-func (r *PostgresClusterReconciler) updatePhase(cr *databasev1alpha1.PostgresCluster, sts *appsv1.StatefulSet) {
+func (r *PostgresClusterReconciler) updatePhase(cr *databasev1beta1.PostgresCluster, sts *appsv1.StatefulSet) {
 	desired := cr.Spec.Replicas
 	ready := sts.Status.ReadyReplicas
 

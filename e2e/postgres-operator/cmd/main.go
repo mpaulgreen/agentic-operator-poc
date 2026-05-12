@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	databasev1alpha1 "github.com/example/postgres-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/postgres-operator/api/v1beta1"
 	"github.com/example/postgres-operator/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
@@ -49,6 +50,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(databasev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(databasev1beta1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -132,8 +134,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgresCluster")
 		os.Exit(1)
 	}
-	if err = (&databasev1alpha1.PostgresCluster{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "PostgresCluster")
+	// Only register v1beta1 webhook — it is the storage version and a superset of v1alpha1.
+	// Registering both causes v1alpha1 webhook to strip v1beta1-only fields (connectionPool, maxMemory)
+	// during admission, since v1alpha1 types don't have those fields.
+	if err = (&databasev1beta1.PostgresCluster{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "PostgresCluster v1beta1")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

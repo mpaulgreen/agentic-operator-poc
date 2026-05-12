@@ -71,9 +71,19 @@ controllerutil.SetControllerReference(cr, object, r.Scheme)
 
 Sets `metadata.ownerReferences[0]` with `controller: true`, `blockOwnerDeletion: true`. One controller reference per object (cannot have two controllers).
 
-## OpenShift-Compatible Container Images
+## Third-Party Container Images in Reconcilers
 
-Upstream Docker Hub images (postgres, redis, mysql, mongo) assume they run as root or a fixed UID. OpenShift runs containers with a **random UID** under the `restricted` SCC — these images crash with `chmod: Operation not permitted`.
+When creating Deployments, StatefulSets, or Jobs that run third-party software (databases, proxies, caches), always verify from the **image's documentation**:
+
+1. **Env var names** — different images of the same software use different conventions. For example, `bitnami/pgbouncer` uses `PGBOUNCER_DATABASE_HOST` while `pgbouncer/pgbouncer` uses `DATABASES_HOST`. Do not assume env var names from training data.
+2. **Default ports** — verify the container exposes the expected port (e.g., PgBouncer: 6432, PostgreSQL: 5432, Redis: 6379).
+3. **Data/config paths** — mount paths differ between upstream and vendor images.
+4. **Non-root compatibility** — on OpenShift, containers run with a random UID under the `restricted` SCC. Upstream images that require root or a fixed UID will crash.
+5. **Image availability** — verify the image is pullable from the target cluster (e.g., `bitnami/pgbouncer:latest` may not resolve on all registries).
+
+### OpenShift-Compatible Images
+
+Upstream Docker Hub images (postgres, redis, mysql, mongo) assume they run as root or a fixed UID. OpenShift runs containers with a **random UID** — these images crash with `chmod: Operation not permitted`.
 
 Use Red Hat Software Collections (SCL) or UBI-based images instead:
 

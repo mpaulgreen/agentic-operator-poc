@@ -19,7 +19,7 @@ package controller
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	databasev1alpha1 "github.com/example/postgres-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/postgres-operator/api/v1beta1"
 )
 
 // Condition type constants for PostgresCluster.
@@ -40,10 +40,12 @@ const (
 	ConditionHAReady = "HAReady"
 
 	ConditionNetworkSecured = "NetworkSecured"
+
+	ConditionConnectionPoolReady = "ConnectionPoolReady"
 )
 
 // setCondition adds or updates a condition on the PostgresCluster status.
-func setCondition(cr *databasev1alpha1.PostgresCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
+func setCondition(cr *databasev1beta1.PostgresCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	now := metav1.Now()
 
 	// Search for existing condition
@@ -73,57 +75,65 @@ func setCondition(cr *databasev1alpha1.PostgresCluster, conditionType string, st
 }
 
 // setAvailableCondition sets the Available condition to True.
-func setAvailableCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func setAvailableCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionAvailable, metav1.ConditionTrue, reason, message)
 }
 
 // setUnavailableCondition sets the Available condition to False.
-func setUnavailableCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func setUnavailableCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionAvailable, metav1.ConditionFalse, reason, message)
 }
 
 // setProgressingCondition sets the Progressing condition to True.
-func setProgressingCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func setProgressingCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionProgressing, metav1.ConditionTrue, reason, message)
 }
 
 // clearProgressingCondition sets the Progressing condition to False.
-func clearProgressingCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func clearProgressingCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionProgressing, metav1.ConditionFalse, reason, message)
 }
 
 // setDegradedCondition sets the Degraded condition to True.
-func setDegradedCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func setDegradedCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionDegraded, metav1.ConditionTrue, reason, message)
 }
 
 // clearDegradedCondition sets the Degraded condition to False.
-func clearDegradedCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func clearDegradedCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionDegraded, metav1.ConditionFalse, reason, message)
 }
 
 // setBackupReadyCondition sets the BackupReady condition to True.
-func setBackupReadyCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func setBackupReadyCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionBackupReady, metav1.ConditionTrue, reason, message)
 }
 
 // clearBackupReadyCondition sets the BackupReady condition to False.
-func clearBackupReadyCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func clearBackupReadyCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionBackupReady, metav1.ConditionFalse, reason, message)
 }
 
-func setHAReadyCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func setHAReadyCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionHAReady, metav1.ConditionTrue, reason, message)
 }
 
-func clearHAReadyCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func clearHAReadyCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionHAReady, metav1.ConditionFalse, reason, message)
 }
 
-func setNetworkSecuredCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func setNetworkSecuredCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionNetworkSecured, metav1.ConditionTrue, reason, message)
 }
 
-func clearNetworkSecuredCondition(cr *databasev1alpha1.PostgresCluster, reason, message string) {
+func clearNetworkSecuredCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
 	setCondition(cr, ConditionNetworkSecured, metav1.ConditionFalse, reason, message)
+}
+
+func setConnectionPoolReadyCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
+	setCondition(cr, ConditionConnectionPoolReady, metav1.ConditionTrue, reason, message)
+}
+
+func clearConnectionPoolReadyCondition(cr *databasev1beta1.PostgresCluster, reason, message string) {
+	setCondition(cr, ConditionConnectionPoolReady, metav1.ConditionFalse, reason, message)
 }

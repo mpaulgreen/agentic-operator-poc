@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1beta1
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-var postgresclusterlog = logf.Log.WithName("postgrescluster-resource")
+var postgresclusterlog = logf.Log.WithName("postgrescluster-v1beta1-resource")
 
 func (r *PostgresCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -35,7 +35,7 @@ func (r *PostgresCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-database-postgres-example-com-v1alpha1-postgrescluster,mutating=true,failurePolicy=fail,sideEffects=None,groups=database.postgres.example.com,resources=postgresclusters,verbs=create;update,versions=v1alpha1,name=mpostgrescluster.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/mutate-database-postgres-example-com-v1beta1-postgrescluster,mutating=true,failurePolicy=fail,sideEffects=None,groups=database.postgres.example.com,resources=postgresclusters,verbs=create;update,versions=v1beta1,name=mpostgresclusterv1beta1.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &PostgresCluster{}
 
@@ -63,9 +63,20 @@ func (r *PostgresCluster) Default() {
 	if r.Spec.Backup != nil && r.Spec.Backup.RetentionDays == 0 {
 		r.Spec.Backup.RetentionDays = 7
 	}
+	if r.Spec.ConnectionPool != nil && r.Spec.ConnectionPool.Enabled {
+		if r.Spec.ConnectionPool.PoolSize == 0 {
+			r.Spec.ConnectionPool.PoolSize = 10
+		}
+		if r.Spec.ConnectionPool.MaxClientConnections == 0 {
+			r.Spec.ConnectionPool.MaxClientConnections = 100
+		}
+		if r.Spec.ConnectionPool.IdleTimeout == "" {
+			r.Spec.ConnectionPool.IdleTimeout = "30s"
+		}
+	}
 }
 
-//+kubebuilder:webhook:path=/validate-database-postgres-example-com-v1alpha1-postgrescluster,mutating=false,failurePolicy=fail,sideEffects=None,groups=database.postgres.example.com,resources=postgresclusters,verbs=create;update,versions=v1alpha1,name=vpostgrescluster.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-database-postgres-example-com-v1beta1-postgrescluster,mutating=false,failurePolicy=fail,sideEffects=None,groups=database.postgres.example.com,resources=postgresclusters,verbs=create;update,versions=v1beta1,name=vpostgresclusterv1beta1.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &PostgresCluster{}
 
@@ -111,6 +122,12 @@ func (r *PostgresCluster) validatePostgresCluster() error {
 	}
 	if r.Spec.Backup != nil && r.Spec.Backup.Enabled && r.Spec.Backup.Schedule == "" {
 		return fmt.Errorf("backup.schedule is required when backup.enabled is true")
+	}
+	if r.Spec.ConnectionPool != nil && r.Spec.ConnectionPool.Enabled {
+		if r.Spec.ConnectionPool.MaxClientConnections < r.Spec.ConnectionPool.PoolSize {
+			return fmt.Errorf("connectionPool.maxClientConnections (%d) must be >= connectionPool.poolSize (%d)",
+				r.Spec.ConnectionPool.MaxClientConnections, r.Spec.ConnectionPool.PoolSize)
+		}
 	}
 	return nil
 }

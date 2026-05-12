@@ -1838,3 +1838,504 @@ sleep 15
 | 25 | Webhook definitions in CSV | C.10 | Both mutating + validating paths |
 | 26 | NetworkPolicy RBAC in CSV | C.10 | networking.k8s.io/networkpolicies |
 | 27 | NetworkPolicy in owned resources | C.10 | Listed |
+
+---
+---
+
+# Scenario D: API Maturity + Connection Pooling (v0.4.0)
+
+Promotes the API to v1beta1 and adds PgBouncer connection pooling via a Deployment. Built using:
+- **Step 1** (Generate): `designing-operator-api` SKILL (Workflow D) — Added api/v1beta1/ with storageversion, ConnectionPoolSpec, maxMemory, v1beta1 webhook
+- **Step 2** (Generate): `implementing-reconciliation` SKILL (Workflow B) — Added reconcileConnectionPool (Deployment + Service), migrated controller to v1beta1 types
+- **Step 3a** (Test): `operator-test-generator` SUBAGENT (Workflow B) — Added connection pool + v1beta1 webhook tests
+- **Step 3b** (Review): `operator-reviewer` SUBAGENT — Reviewed modified code
+- **Step 4** (Generate): `bundling-operator` SKILL (Workflow B) — Updated CSV v0.3.0 → v0.4.0, multi-version CRD, maturity alpha→beta
+- **Step 5** (Validate): `operator-bundle-validator` SUBAGENT — Validated updated bundle
+
+**Changes**: v1beta1 API (storage version) with ConnectionPoolSpec (enabled, poolSize, maxClientConnections, idleTimeout) and maxMemory, reconcileConnectionPool creating Deployment + ClusterIP Service for PgBouncer, ConnectionPoolReady condition, controller migrated from v1alpha1 to v1beta1 types, CSV v0.4.0 with replaces + v1beta1 webhookdefinitions + maturity=beta.
+
+**Prerequisites**:
+- Scenario C completed successfully. All Scenario C CRs deleted.
+- cert-manager operator installed (from Scenario C).
+
+## Scenario D Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/postgres-operator:v0.4.0
+export BUNDLE_IMG=quay.io/mpaulgreen/postgres-operator-bundle:v0.4.0
+export NAMESPACE=postgres-operator-system
+
+cd e2e/postgres-operator
+```
+
+---
+
+## Phase D.1: Build and Deploy v0.4.0
+
+### D.1.1 Build the Operator Image
+
+```bash
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### D.1.2 Deploy the Operator
+
+#### Option A: `make deploy` (Development)
+
+```bash
+make manifests
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/postgres-operator:v0.4.0|$IMG|g" bundle/manifests/postgres-operator.clusterserviceversion.yaml
+
+# Refresh CRD in bundle (multi-version)
+make manifests
+cp config/crd/bases/database.postgres.example.com_postgresclusters.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### D.1.3 Verify Deployment
+
+```bash
+# Operator pod running
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+
+# CRD has both versions
+oc get crd postgresclusters.database.postgres.example.com -o jsonpath='{.spec.versions[*].name}' && echo ""
+
+# v1beta1 is storage version
+oc get crd postgresclusters.database.postgres.example.com -o jsonpath='{range .spec.versions[*]}{.name}: storage={.storage}{"\n"}{end}'
+
+# CRD has connectionPool field in v1beta1
+oc get crd postgresclusters.database.postgres.example.com -o jsonpath='{.spec.versions[?(@.name=="v1beta1")].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+
+# Controller logs — should show 9 EventSources (added Deployment)
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=20 | grep -E "Starting EventSource|Starting workers"
+
+# Webhook configs registered (both v1alpha1 and v1beta1)
+oc get mutatingwebhookconfiguration | grep postgres
+oc get validatingwebhookconfiguration | grep postgres
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.4.0 image
+- [ ] CRD has both v1alpha1 and v1beta1 versions
+- [ ] v1beta1 is the storage version (storage=true)
+- [ ] v1beta1 schema has connectionPool, maxMemory fields
+- [ ] Controller watching 9 EventSources (added Deployment)
+- [ ] Webhook configurations registered
+
+---
+
+## Phase D.2: v1beta1 API + Existing Features Regression
+
+### D.2.1 Create CR with v1beta1 API
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: database.postgres.example.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: pg-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "16"
+  storage:
+    size: 1Gi
+  ha:
+    minAvailable: 2
+EOF
+
+sleep 30
+```
+
+### D.2.2 Verify All A+B+C Resources Created
+
+```bash
+echo "=== Managed Resources ==="
+oc get secret pg-test-credentials -n $NAMESPACE && echo "PASS: Secret" || echo "FAIL: Secret"
+oc get configmap pg-test-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL: ConfigMap"
+oc get service pg-test-headless -n $NAMESPACE && echo "PASS: Service" || echo "FAIL: Service"
+oc get statefulset pg-test -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL: StatefulSet"
+oc get pdb pg-test-pdb -n $NAMESPACE && echo "PASS: PDB" || echo "FAIL: PDB"
+oc get networkpolicy pg-test-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy" || echo "FAIL: NetworkPolicy"
+
+echo ""
+echo "=== No Pooler (connectionPool not configured) ==="
+oc get deployment pg-test-pooler -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: No pooler Deployment" || echo "FAIL: Pooler exists unexpectedly"
+oc get service pg-test-pooler -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: No pooler Service" || echo "FAIL: Pooler Service exists unexpectedly"
+
+echo ""
+echo "=== Status ==="
+oc get postgrescluster pg-test -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All 6 existing resources created (Secret, ConfigMap, Service, StatefulSet, PDB, NetworkPolicy)
+- [ ] No pooler Deployment or Service (connectionPool not configured)
+- [ ] Status shows Running with v1beta1 apiVersion
+
+---
+
+## Phase D.3: Connection Pool — Enable
+
+### D.3.1 Enable Connection Pooling
+
+```bash
+oc patch postgrescluster pg-test -n $NAMESPACE --type merge -p '{"spec":{"connectionPool":{"enabled":true,"poolSize":10,"maxClientConnections":100,"idleTimeout":"30s"}}}'
+sleep 15
+```
+
+### D.3.2 Verify Pooler Deployment Created
+
+```bash
+echo "=== Pooler Deployment ==="
+oc get deployment pg-test-pooler -n $NAMESPACE
+oc get deployment pg-test-pooler -n $NAMESPACE -o jsonpath='{.spec.replicas}' && echo " replicas (should be 2)"
+oc get deployment pg-test-pooler -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[0].image}' && echo " image"
+oc get deployment pg-test-pooler -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[0].ports[0].containerPort}' && echo " port (should be 6432)"
+
+echo ""
+echo "=== Pooler Deployment Env Vars ==="
+oc get deployment pg-test-pooler -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -c "
+import json, sys
+for env in json.load(sys.stdin):
+    print(f\"  {env['name']}: {env.get('value', '(from secret)')}\")
+"
+
+echo ""
+echo "=== Pooler Deployment Owner Reference ==="
+oc get deployment pg-test-pooler -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be PostgresCluster)"
+```
+
+**Expected**:
+- [ ] Deployment `pg-test-pooler` created with 2 replicas
+- [ ] Image is PgBouncer
+- [ ] Port 6432
+- [ ] Env vars include POSTGRESQL_HOST, PGBOUNCER_POOL_SIZE=10, PGBOUNCER_MAX_CLIENT_CONN=100
+- [ ] Owner reference → PostgresCluster
+
+### D.3.3 Verify Pooler Service Created
+
+```bash
+echo "=== Pooler Service ==="
+oc get service pg-test-pooler -n $NAMESPACE
+oc get service pg-test-pooler -n $NAMESPACE -o jsonpath='{.spec.type}' && echo " type (should be ClusterIP, not None)"
+oc get service pg-test-pooler -n $NAMESPACE -o jsonpath='{.spec.ports[0].port}' && echo " port (should be 6432)"
+oc get service pg-test-pooler -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " owner (should be PostgresCluster)"
+```
+
+**Expected**:
+- [ ] Service `pg-test-pooler` created (ClusterIP, NOT headless)
+- [ ] Port 6432
+- [ ] Owner reference → PostgresCluster
+
+### D.3.4 Verify ConnectionPoolReady Condition
+
+```bash
+oc get postgrescluster pg-test -n $NAMESPACE -o jsonpath='{.status.conditions}' | python3 -c "
+import json, sys
+conditions = json.load(sys.stdin)
+for c in conditions:
+    if c['type'] == 'ConnectionPoolReady':
+        print(f\"ConnectionPoolReady: {c['status']} (reason: {c['reason']})\")
+"
+echo ""
+oc get postgrescluster pg-test -n $NAMESPACE -o jsonpath='{.status.poolerEndpoint}' && echo " poolerEndpoint"
+oc get postgrescluster pg-test -n $NAMESPACE -o jsonpath='{.status.poolerReady}' && echo " poolerReady"
+```
+
+**Expected**:
+- [ ] ConnectionPoolReady: True
+- [ ] poolerEndpoint: `pg-test-pooler.<namespace>.svc.cluster.local:6432`
+- [ ] poolerReady: true
+
+### D.3.5 Verify Existing Resources Unaffected
+
+```bash
+oc get statefulset pg-test -n $NAMESPACE && echo "PASS: StatefulSet still exists"
+oc get pdb pg-test-pdb -n $NAMESPACE && echo "PASS: PDB still exists"
+oc get networkpolicy pg-test-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy still exists"
+oc get postgrescluster pg-test -n $NAMESPACE -o jsonpath='{.status.phase}' && echo " (should still be Running)"
+```
+
+---
+
+## Phase D.4: Connection Pool — Disable
+
+### D.4.1 Disable Connection Pooling
+
+```bash
+oc patch postgrescluster pg-test -n $NAMESPACE --type merge -p '{"spec":{"connectionPool":{"enabled":false}}}'
+sleep 15
+
+echo "=== Pooler After Disable ==="
+oc get deployment pg-test-pooler -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Deployment deleted" || echo "FAIL: Deployment still exists"
+oc get service pg-test-pooler -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Service deleted" || echo "FAIL: Service still exists"
+
+echo ""
+echo "=== ConnectionPoolReady After Disable ==="
+oc get postgrescluster pg-test -n $NAMESPACE -o jsonpath='{.status.conditions}' | python3 -c "
+import json, sys
+conditions = json.load(sys.stdin)
+for c in conditions:
+    if c['type'] == 'ConnectionPoolReady':
+        print(f\"ConnectionPoolReady: {c['status']} (reason: {c['reason']})\")
+"
+```
+
+**Expected**:
+- [ ] Pooler Deployment deleted
+- [ ] Pooler Service deleted
+- [ ] ConnectionPoolReady: False (ConnectionPoolDisabled)
+
+---
+
+## Phase D.5: v1beta1 Webhook Validation
+
+### D.5.1 Reject maxClientConnections < poolSize (v1beta1)
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: database.postgres.example.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: pg-bad-pool
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "16"
+  storage:
+    size: 1Gi
+  connectionPool:
+    enabled: true
+    poolSize: 50
+    maxClientConnections: 10
+EOF
+```
+
+**Expected**: Rejected — `connectionPool.maxClientConnections (10) must be >= connectionPool.poolSize (50)`.
+
+### D.5.2 v1alpha1 Webhooks Still Work
+
+```bash
+# v1alpha1 validation should still reject invalid HA
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: database.postgres.example.com/v1alpha1
+kind: PostgresCluster
+metadata:
+  name: pg-bad-v1alpha1
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "16"
+  storage:
+    size: 1Gi
+  ha:
+    minAvailable: 3
+EOF
+```
+
+**Expected**: Rejected — v1alpha1 webhook still validates `ha.minAvailable (3) must be less than replicas (3)`.
+
+---
+
+## Phase D.6: Backward Compatibility
+
+### D.6.1 v1alpha1 CRs Still Accessible
+
+```bash
+# Read the existing v1beta1 CR at v1alpha1 endpoint
+oc get postgrescluster pg-test -n $NAMESPACE -o jsonpath='{.apiVersion}' && echo " (stored as v1beta1 but readable)"
+```
+
+**Expected**: CR is accessible (API server handles version conversion).
+
+---
+
+## Phase D.7: Idempotency
+
+### D.7.1 Re-reconcile With Connection Pool
+
+```bash
+# Re-enable connection pool first
+oc patch postgrescluster pg-test -n $NAMESPACE --type merge -p '{"spec":{"connectionPool":{"enabled":true,"poolSize":10,"maxClientConnections":100}}}'
+sleep 15
+
+# Restart controller
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment/postgres-operator-controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "Deployments: $(oc get deployment -n $NAMESPACE 2>&1 | grep -c pg-test-pooler) (should be 1)"
+echo "Services (pooler): $(oc get service -n $NAMESPACE 2>&1 | grep -c pg-test-pooler) (should be 1)"
+echo "NetworkPolicies: $(oc get networkpolicy -n $NAMESPACE 2>&1 | grep -c pg-test) (should be 1)"
+echo "PDBs: $(oc get pdb -n $NAMESPACE 2>&1 | grep -c pg-test) (should be 1)"
+echo "StatefulSets: $(oc get statefulset -n $NAMESPACE 2>&1 | grep -c pg-test) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each resource, no duplicates.
+
+---
+
+## Phase D.8: Delete CR — All Resources
+
+### D.8.1 Delete and Verify All 8 Resources Cleaned
+
+```bash
+oc delete postgrescluster pg-test -n $NAMESPACE
+sleep 15
+
+oc get secret pg-test-credentials -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Secret cleaned"
+oc get configmap pg-test-config -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: ConfigMap cleaned"
+oc get service pg-test-headless -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Service (headless) cleaned"
+oc get service pg-test-pooler -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Service (pooler) cleaned"
+oc get statefulset pg-test -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: StatefulSet cleaned"
+oc get pdb pg-test-pdb -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: PDB cleaned"
+oc get networkpolicy pg-test-network-policy -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: NetworkPolicy cleaned"
+oc get deployment pg-test-pooler -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Deployment (pooler) cleaned"
+```
+
+**Expected**:
+- [ ] All 8 managed resources garbage collected (Secret, ConfigMap, Service×2, StatefulSet, PDB, NetworkPolicy, Deployment)
+- [ ] No orphaned resources
+
+---
+
+## Phase D.9: RBAC Verification
+
+### D.9.1 Verify Deployment RBAC
+
+```bash
+oc auth can-i create deployments --as=system:serviceaccount:$NAMESPACE:postgres-operator-controller-manager && echo "PASS: Can create Deployments" || echo "FAIL"
+oc auth can-i delete deployments --as=system:serviceaccount:$NAMESPACE:postgres-operator-controller-manager && echo "PASS: Can delete Deployments" || echo "FAIL"
+```
+
+**Expected**: Both return "yes".
+
+---
+
+## Phase D.10: OLM Bundle Validation
+
+### D.10.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*postgres-operator.v' bundle/manifests/postgres-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/postgres-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/postgres-operator.clusterserviceversion.yaml
+grep '^  maturity:' bundle/manifests/postgres-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `postgres-operator.v0.4.0`
+- [ ] replaces: `postgres-operator.v0.3.0`
+- [ ] version: `0.4.0`
+- [ ] maturity: `beta`
+
+### D.10.2 Verify Connection Pool Descriptors
+
+```bash
+grep -E 'connectionPool|poolSize|maxClientConnections|idleTimeout|maxMemory|poolerReady|poolerEndpoint' bundle/manifests/postgres-operator.clusterserviceversion.yaml | grep 'path:' | head -10
+```
+
+**Expected**: specDescriptors for connectionPool fields + maxMemory, statusDescriptors for poolerReady + poolerEndpoint.
+
+### D.10.3 Verify Deployment RBAC in CSV
+
+```bash
+grep -B2 -A8 'deployments' bundle/manifests/postgres-operator.clusterserviceversion.yaml | head -12
+```
+
+**Expected**: `apps/deployments` with CRUD verbs (separate from `apps/statefulsets`).
+
+### D.10.4 Verify Multi-Version CRD
+
+```bash
+grep 'name: v1' bundle/manifests/database.postgres.example.com_postgresclusters.yaml
+grep 'storage:' bundle/manifests/database.postgres.example.com_postgresclusters.yaml | head -4
+```
+
+**Expected**: Both v1alpha1 and v1beta1 listed, v1beta1 has storage=true.
+
+### D.10.5 Verify v1beta1 Webhook Definitions
+
+```bash
+grep 'webhookPath.*v1beta1' bundle/manifests/postgres-operator.clusterserviceversion.yaml
+```
+
+**Expected**: Both mutating and validating webhook paths for v1beta1.
+
+### D.10.6 Bundle Validate (if operator-sdk available)
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario D Cleanup
+
+```bash
+# Delete all test CRs
+oc delete postgrescluster --all -n $NAMESPACE
+sleep 15
+
+# Undeploy the operator:
+make undeploy                                                    # if deployed with make deploy
+# operator-sdk cleanup postgres-operator --namespace $NAMESPACE    # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario D Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | Operator deploys with v0.4.0 image | D.1 | Pod Running |
+| 2 | CRD has v1alpha1 and v1beta1 | D.1 | Both versions present |
+| 3 | v1beta1 is storage version | D.1 | storage=true |
+| 4 | v1beta1 has connectionPool + maxMemory fields | D.1 | In CRD schema |
+| 5 | 9 EventSources (added Deployment) | D.1 | Controller watching |
+| 6 | All A+B+C resources work with v1beta1 CR | D.2 | 6 resources created |
+| 7 | No pooler when connectionPool not configured | D.2 | Not found |
+| 8 | Pooler Deployment created when enabled | D.3 | 2 replicas, port 6432 |
+| 9 | Pooler has correct env vars | D.3 | PGBOUNCER_POOL_SIZE etc |
+| 10 | Pooler Service created (ClusterIP, 6432) | D.3 | Not headless |
+| 11 | ConnectionPoolReady: True | D.3 | Condition set |
+| 12 | poolerEndpoint in status | D.3 | Correct DNS |
+| 13 | Existing resources unaffected | D.3 | StatefulSet/PDB/NP ok |
+| 14 | Pooler deleted when disabled | D.4 | Deployment + Service gone |
+| 15 | ConnectionPoolReady: False when disabled | D.4 | ConnectionPoolDisabled |
+| 16 | Reject maxClientConnections < poolSize | D.5 | v1beta1 webhook |
+| 17 | v1alpha1 webhooks still work | D.5 | HA validation still rejects |
+| 18 | v1alpha1 CRs still accessible | D.6 | Backward compatible |
+| 19 | Idempotent — no duplicate pooler resources | D.7 | Exactly 1 each |
+| 20 | All 8 resources cleaned on CR delete | D.8 | Including Deployment + pooler Service |
+| 21 | Deployment RBAC works | D.9 | can-i returns yes |
+| 22 | CSV version 0.4.0 with replaces | D.10 | Correct upgrade path |
+| 23 | maturity: beta | D.10 | Upgraded from alpha |
+| 24 | Connection pool descriptors in CSV | D.10 | specDescriptors + statusDescriptors |
+| 25 | Deployment RBAC in CSV | D.10 | apps/deployments |
+| 26 | Multi-version CRD (v1alpha1 + v1beta1) | D.10 | v1beta1 storage |
+| 27 | v1beta1 webhook definitions in CSV | D.10 | Both paths |
+| 28 | Bundle validates | D.10 | No errors |

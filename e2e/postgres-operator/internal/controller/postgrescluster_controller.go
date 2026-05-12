@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	databasev1alpha1 "github.com/example/postgres-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/postgres-operator/api/v1beta1"
 )
 
 const (
@@ -60,6 +60,7 @@ type PostgresClusterReconciler struct {
 //+kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -67,7 +68,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	logger := log.FromContext(ctx)
 
 	// --- PHASE 1: FETCH ---
-	cr := &databasev1alpha1.PostgresCluster{}
+	cr := &databasev1beta1.PostgresCluster{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("PostgresCluster resource not found, likely deleted")
@@ -115,6 +116,10 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return r.handleError(ctx, cr, "NetworkPolicyReconcileFailed", err)
 	}
 
+	if err := r.reconcileConnectionPool(ctx, cr); err != nil {
+		return r.handleError(ctx, cr, "ConnectionPoolReconcileFailed", err)
+	}
+
 	if err := r.reconcileStatefulSet(ctx, cr); err != nil {
 		return r.handleError(ctx, cr, "StatefulSetReconcileFailed", err)
 	}
@@ -137,7 +142,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // handleDeletion handles the deletion of a PostgresCluster resource.
-func (r *PostgresClusterReconciler) handleDeletion(ctx context.Context, cr *databasev1alpha1.PostgresCluster) (ctrl.Result, error) {
+func (r *PostgresClusterReconciler) handleDeletion(ctx context.Context, cr *databasev1beta1.PostgresCluster) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if controllerutil.ContainsFinalizer(cr, postgresClusterFinalizer) {
@@ -161,7 +166,7 @@ func (r *PostgresClusterReconciler) handleDeletion(ctx context.Context, cr *data
 }
 
 // handleError records a warning event and returns a requeue result with the error.
-func (r *PostgresClusterReconciler) handleError(ctx context.Context, cr *databasev1alpha1.PostgresCluster, reason string, err error) (ctrl.Result, error) {
+func (r *PostgresClusterReconciler) handleError(ctx context.Context, cr *databasev1beta1.PostgresCluster, reason string, err error) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Error(err, "Reconciliation failed", "reason", reason)
 	r.Recorder.Event(cr, corev1.EventTypeWarning, reason, err.Error())
@@ -178,7 +183,7 @@ func (r *PostgresClusterReconciler) handleError(ctx context.Context, cr *databas
 // SetupWithManager sets up the controller with the Manager.
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&databasev1alpha1.PostgresCluster{}).
+		For(&databasev1beta1.PostgresCluster{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).
@@ -186,5 +191,6 @@ func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&batchv1.CronJob{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&networkingv1.NetworkPolicy{}).
+		Owns(&appsv1.Deployment{}).
 		Complete(r)
 }

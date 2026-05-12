@@ -182,10 +182,14 @@ Use when promoting an API from experimental to stable (v1alpha1 → v1beta1 → 
 
 4. **Update main.go**:
    - Add import for new version package
-   - Add scheme registration
-   - Set up webhook for new version if applicable
+   - Add scheme registration for BOTH versions (both must be in the scheme for the API server to serve them)
+   - **Webhook registration**: Only register the webhook for the STORAGE VERSION (newest). Do NOT register webhooks for both versions — the old version's webhook will serialize/deserialize using old types, stripping fields that only exist in the new version. The storage version's webhook is a superset and handles all fields correctly.
+   - **Remove the old version's webhook file** (`api/<old-version>/<kind>_webhook.go`) so that `make manifests` (controller-gen) does not generate webhook configuration entries for the old version. If the file remains, controller-gen will include the old webhook paths in `config/webhook/manifests.yaml`, and the API server will call both — the old one will strip new fields.
+   - **Remove old version webhookdefinitions from the CSV** when updating the bundle. The CSV's `webhookdefinitions` section must only contain entries for the storage version. Old version entries cause OLM to create webhook configurations pointing to non-existent paths, failing CR creation.
 
-5. **For conversion between versions**: Use Workflow C to add a conversion webhook with hub-and-spoke pattern. See `references/api-versioning.md`.
+5. **CRD conversion strategy**:
+   - If the new version only ADDS optional fields (with nil/zero defaults) and the old version's fields are unchanged, use `strategy: None`. In this case, **remove or comment out** the CRD conversion webhook patch (`config/crd/patches/webhook_in_<kind>.yaml`) from `config/crd/kustomization.yaml`. Leaving the patch active causes the API server to call a non-existent `/convert` endpoint, resulting in TLS or 404 errors when creating resources.
+   - If the new version RENAMES, REMOVES, or changes field types, use `strategy: Webhook` with a hub-and-spoke conversion pattern. See `references/api-versioning.md`.
 
 ## Files Produced
 

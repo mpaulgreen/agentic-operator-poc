@@ -2,9 +2,9 @@ resources:
 - bases/database.postgres.example.com_postgresclusters.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
-# [WEBHOOK]
-patches:
-- path: patches/webhook_in_postgresclusters.yaml
+# [WEBHOOK] CRD conversion webhook patch removed — using strategy: None
+# (conversion webhook only needed when schemas differ and require hub-and-spoke conversion)
+# - path: patches/webhook_in_postgresclusters.yaml
 #+kubebuilder:scaffold:crdkustomizewebhookpatch
 
 # [CERTMANAGER]

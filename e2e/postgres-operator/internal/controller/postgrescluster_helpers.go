@@ -20,7 +20,7 @@ import (
 	"crypto/rand"
 	"math/big"
 
-	databasev1alpha1 "github.com/example/postgres-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/postgres-operator/api/v1beta1"
 )
 
 const (
@@ -29,7 +29,7 @@ const (
 )
 
 // labelsForPostgresCluster returns the standard labels for all resources managed by the operator.
-func labelsForPostgresCluster(cr *databasev1alpha1.PostgresCluster) map[string]string {
+func labelsForPostgresCluster(cr *databasev1beta1.PostgresCluster) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "postgresql",
 		"app.kubernetes.io/instance":   cr.Name,

@@ -35,7 +35,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	databasev1alpha1 "github.com/example/postgres-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/postgres-operator/api/v1beta1"
 )
 
 var _ = Describe("PostgresCluster Controller", func() {
@@ -53,7 +53,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.PostgresCluster
+			cr         *databasev1beta1.PostgresCluster
 			reconciler *PostgresClusterReconciler
 		)
 
@@ -63,15 +63,15 @@ var _ = Describe("PostgresCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.PostgresCluster{
+			cr = &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Replicas: 3,
 					Version:  "16",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -87,7 +87,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.PostgresCluster{}
+			resource := &databasev1beta1.PostgresCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				// Remove finalizer to allow cleanup
 				resource.Finalizers = nil
@@ -100,7 +100,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
 			Expect(err).NotTo(HaveOccurred())
 
-			updated := &databasev1alpha1.PostgresCluster{}
+			updated := &databasev1beta1.PostgresCluster{}
 			Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
 			Expect(updated.Finalizers).To(ContainElement("database.postgres.example.com/finalizer"))
 		})
@@ -149,7 +149,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was added
-			updated := &databasev1alpha1.PostgresCluster{}
+			updated := &databasev1beta1.PostgresCluster{}
 			Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
 			Expect(updated.Finalizers).NotTo(BeEmpty())
 
@@ -161,7 +161,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was removed (resource may or may not still exist)
-			deleted := &databasev1alpha1.PostgresCluster{}
+			deleted := &databasev1beta1.PostgresCluster{}
 			err = k8sClient.Get(ctx, key, deleted)
 			if err == nil {
 				Expect(deleted.Finalizers).To(BeEmpty())
@@ -179,7 +179,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.PostgresCluster
+			cr         *databasev1beta1.PostgresCluster
 			reconciler *PostgresClusterReconciler
 		)
 
@@ -189,15 +189,15 @@ var _ = Describe("PostgresCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.PostgresCluster{
+			cr = &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Replicas: 3,
 					Version:  "16",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -215,7 +215,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.PostgresCluster{}
+			resource := &databasev1beta1.PostgresCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -269,7 +269,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.PostgresCluster
+			cr         *databasev1beta1.PostgresCluster
 			reconciler *PostgresClusterReconciler
 		)
 
@@ -279,15 +279,15 @@ var _ = Describe("PostgresCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.PostgresCluster{
+			cr = &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Replicas: 3,
 					Version:  "16",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -304,7 +304,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.PostgresCluster{}
+			resource := &databasev1beta1.PostgresCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -358,7 +358,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.PostgresCluster
+			cr         *databasev1beta1.PostgresCluster
 			reconciler *PostgresClusterReconciler
 		)
 
@@ -368,15 +368,15 @@ var _ = Describe("PostgresCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.PostgresCluster{
+			cr = &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Replicas: 3,
 					Version:  "16",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -393,7 +393,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.PostgresCluster{}
+			resource := &databasev1beta1.PostgresCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -448,7 +448,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.PostgresCluster
+			cr         *databasev1beta1.PostgresCluster
 			reconciler *PostgresClusterReconciler
 		)
 
@@ -458,15 +458,15 @@ var _ = Describe("PostgresCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.PostgresCluster{
+			cr = &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Replicas: 3,
 					Version:  "16",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -483,7 +483,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.PostgresCluster{}
+			resource := &databasev1beta1.PostgresCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -548,7 +548,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.PostgresCluster
+			cr         *databasev1beta1.PostgresCluster
 			reconciler *PostgresClusterReconciler
 		)
 
@@ -558,18 +558,18 @@ var _ = Describe("PostgresCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.PostgresCluster{
+			cr = &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Replicas: 3,
 					Version:  "16",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
-					Backup: &databasev1alpha1.BackupSpec{
+					Backup: &databasev1beta1.BackupSpec{
 						Enabled:       true,
 						Schedule:      "0 2 * * *",
 						RetentionDays: 7,
@@ -588,7 +588,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.PostgresCluster{}
+			resource := &databasev1beta1.PostgresCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -639,7 +639,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 	Context("When reconciling PodDisruptionBudget", func() {
 		var (
 			ctx        context.Context
-			cr         *databasev1alpha1.PostgresCluster
+			cr         *databasev1beta1.PostgresCluster
 			reconciler *PostgresClusterReconciler
 			name       string
 			namespace  string
@@ -653,16 +653,16 @@ var _ = Describe("PostgresCluster Controller", func() {
 			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 
-			cr = &databasev1alpha1.PostgresCluster{
+			cr = &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Replicas: 3,
 					Version:  "16",
-					Storage:  databasev1alpha1.StorageSpec{Size: "1Gi"},
-					HA: &databasev1alpha1.HASpec{
+					Storage:  databasev1beta1.StorageSpec{Size: "1Gi"},
+					HA: &databasev1beta1.HASpec{
 						MinAvailable:     int32Ptr(2),
 						AntiAffinityMode: "preferred",
 					},
@@ -701,7 +701,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 		})
 
 		It("should create PDB with maxUnavailable when ha.maxUnavailable is set", func() {
-			cr.Spec.HA = &databasev1alpha1.HASpec{
+			cr.Spec.HA = &databasev1beta1.HASpec{
 				MaxUnavailable:   int32Ptr(1),
 				AntiAffinityMode: "preferred",
 			}
@@ -767,7 +767,7 @@ var _ = Describe("PostgresCluster Controller", func() {
 	Context("When reconciling NetworkPolicy", func() {
 		var (
 			ctx        context.Context
-			cr         *databasev1alpha1.PostgresCluster
+			cr         *databasev1beta1.PostgresCluster
 			reconciler *PostgresClusterReconciler
 			name       string
 			namespace  string
@@ -781,11 +781,11 @@ var _ = Describe("PostgresCluster Controller", func() {
 			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 
-			cr = &databasev1alpha1.PostgresCluster{
+			cr = &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Replicas: 3, Version: "16",
-					Storage: databasev1alpha1.StorageSpec{Size: "1Gi"},
+					Storage: databasev1beta1.StorageSpec{Size: "1Gi"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -832,15 +832,114 @@ var _ = Describe("PostgresCluster Controller", func() {
 	})
 
 	// ============================================================
+	// ConnectionPool Tests
+	// ============================================================
+	Context("When reconciling ConnectionPool", func() {
+		var (
+			ctx        context.Context
+			cr         *databasev1beta1.PostgresCluster
+			reconciler *PostgresClusterReconciler
+			name       string
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			namespace = fmt.Sprintf("test-cp-%d", time.Now().UnixNano())
+			name = "pg-cp-test"
+
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			cr = &databasev1beta1.PostgresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+				Spec: databasev1beta1.PostgresClusterSpec{
+					Replicas: 3, Version: "16",
+					Storage: databasev1beta1.StorageSpec{Size: "1Gi"},
+					ConnectionPool: &databasev1beta1.ConnectionPoolSpec{
+						Enabled:              true,
+						PoolSize:             10,
+						MaxClientConnections: 100,
+						IdleTimeout:          "30s",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			// Re-fetch for UID
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cr)).To(Succeed())
+
+			reconciler = &PostgresClusterReconciler{
+				Client: k8sClient, Scheme: k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+		})
+
+		AfterEach(func() {
+			_ = k8sClient.Delete(ctx, cr)
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			_ = k8sClient.Delete(ctx, ns)
+		})
+
+		It("should create pooler Deployment and Service when enabled", func() {
+			// Need secret for EnvFrom reference
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-credentials", name), Namespace: namespace},
+				StringData: map[string]string{"POSTGRESQL_PASSWORD": "test"},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			Expect(reconciler.reconcileConnectionPool(ctx, cr)).To(Succeed())
+
+			deploy := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-pooler", name), Namespace: namespace}, deploy)).To(Succeed())
+			Expect(*deploy.Spec.Replicas).To(Equal(int32(2)))
+			Expect(deploy.OwnerReferences).To(HaveLen(1))
+
+			svc := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-pooler", name), Namespace: namespace}, svc)).To(Succeed())
+			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(6432)))
+		})
+
+		It("should not create pooler when connectionPool is nil", func() {
+			cr.Spec.ConnectionPool = nil
+			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
+			Expect(reconciler.reconcileConnectionPool(ctx, cr)).To(Succeed())
+
+			deploy := &appsv1.Deployment{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-pooler", name), Namespace: namespace}, deploy)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+
+		It("should not recreate existing pooler (idempotent)", func() {
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-credentials", name), Namespace: namespace},
+				StringData: map[string]string{"POSTGRESQL_PASSWORD": "test"},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			Expect(reconciler.reconcileConnectionPool(ctx, cr)).To(Succeed())
+
+			deploy := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-pooler", name), Namespace: namespace}, deploy)).To(Succeed())
+			originalVersion := deploy.ResourceVersion
+
+			Expect(reconciler.reconcileConnectionPool(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-pooler", name), Namespace: namespace}, deploy)).To(Succeed())
+			Expect(deploy.ResourceVersion).To(Equal(originalVersion))
+		})
+	})
+
+	// ============================================================
 	// Helper Function Tests
 	// ============================================================
 	Context("When testing helper functions", func() {
 		It("should return correct labels with expected keys and values", func() {
-			cr := &databasev1alpha1.PostgresCluster{
+			cr := &databasev1beta1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "my-postgres",
 				},
-				Spec: databasev1alpha1.PostgresClusterSpec{
+				Spec: databasev1beta1.PostgresClusterSpec{
 					Version: "16",
 				},
 			}

@@ -10,14 +10,14 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-database-postgres-example-com-v1alpha1-postgrescluster
+      path: /mutate-database-postgres-example-com-v1beta1-postgrescluster
   failurePolicy: Fail
-  name: mpostgrescluster.kb.io
+  name: mpostgresclusterv1beta1.kb.io
   rules:
   - apiGroups:
     - database.postgres.example.com
     apiVersions:
-    - v1alpha1
+    - v1beta1
     operations:
     - CREATE
     - UPDATE
@@ -36,14 +36,14 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-database-postgres-example-com-v1alpha1-postgrescluster
+      path: /validate-database-postgres-example-com-v1beta1-postgrescluster
   failurePolicy: Fail
-  name: vpostgrescluster.kb.io
+  name: vpostgresclusterv1beta1.kb.io
   rules:
   - apiGroups:
     - database.postgres.example.com
     apiVersions:
-    - v1alpha1
+    - v1beta1
     operations:
     - CREATE
     - UPDATE

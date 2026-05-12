@@ -34,13 +34,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	databasev1alpha1 "github.com/example/postgres-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/postgres-operator/api/v1beta1"
 )
 
 // reconcileSecret ensures the PostgreSQL credentials Secret exists.
 // Secret name: <name>-credentials
 // Keys: POSTGRESQL_PASSWORD, POSTGRESQL_USER, POSTGRESQL_DATABASE (RHEL9 format)
-func (r *PostgresClusterReconciler) reconcileSecret(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+func (r *PostgresClusterReconciler) reconcileSecret(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
 	name := fmt.Sprintf("%s-credentials", cr.Name)
 
 	// 1. CHECK if exists
@@ -86,7 +86,7 @@ func (r *PostgresClusterReconciler) reconcileSecret(ctx context.Context, cr *dat
 // reconcileConfigMap ensures the PostgreSQL configuration ConfigMap exists.
 // ConfigMap name: <name>-config
 // Key: postgresql.conf with shared_buffers, max_connections, wal_level settings
-func (r *PostgresClusterReconciler) reconcileConfigMap(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+func (r *PostgresClusterReconciler) reconcileConfigMap(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
 	name := fmt.Sprintf("%s-config", cr.Name)
 
 	// 1. CHECK if exists
@@ -129,7 +129,7 @@ func (r *PostgresClusterReconciler) reconcileConfigMap(ctx context.Context, cr *
 
 // reconcileService ensures the headless Service exists for StatefulSet DNS.
 // Service name: <name>-headless, ClusterIP None, port 5432
-func (r *PostgresClusterReconciler) reconcileService(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+func (r *PostgresClusterReconciler) reconcileService(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
 	name := fmt.Sprintf("%s-headless", cr.Name)
 
 	// 1. CHECK if exists
@@ -181,7 +181,7 @@ func (r *PostgresClusterReconciler) reconcileService(ctx context.Context, cr *da
 // reconcileStatefulSet ensures the PostgreSQL StatefulSet exists and is up to date.
 // Image: registry.redhat.io/rhel9/postgresql-<version> (OpenShift-compatible)
 // Data dir: /var/lib/pgsql/data, Config dir: /opt/app-root/src/postgresql-cfg
-func (r *PostgresClusterReconciler) reconcileStatefulSet(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+func (r *PostgresClusterReconciler) reconcileStatefulSet(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
 	name := cr.Name
 
 	// 1. CHECK if exists
@@ -336,7 +336,7 @@ func (r *PostgresClusterReconciler) reconcileStatefulSet(ctx context.Context, cr
 // reconcileCronJob ensures the backup CronJob exists if backup is enabled.
 // CronJob name: <name>-backup
 // Only created when spec.backup is non-nil and spec.backup.enabled is true.
-func (r *PostgresClusterReconciler) reconcileCronJob(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+func (r *PostgresClusterReconciler) reconcileCronJob(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
 	name := fmt.Sprintf("%s-backup", cr.Name)
 
 	// If backup is not enabled, ensure the CronJob does not exist
@@ -435,7 +435,7 @@ func (r *PostgresClusterReconciler) reconcileCronJob(ctx context.Context, cr *da
 // reconcilePodDisruptionBudget ensures the PDB exists when HA is configured.
 // PDB name: <name>-pdb
 // Only created when spec.ha is non-nil.
-func (r *PostgresClusterReconciler) reconcilePodDisruptionBudget(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+func (r *PostgresClusterReconciler) reconcilePodDisruptionBudget(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
 	name := fmt.Sprintf("%s-pdb", cr.Name)
 
 	if cr.Spec.HA == nil {
@@ -529,7 +529,7 @@ func (r *PostgresClusterReconciler) reconcilePodDisruptionBudget(ctx context.Con
 	return nil
 }
 
-func computePDBValues(cr *databasev1alpha1.PostgresCluster) (minAvailable *int32, maxUnavailable *int32) {
+func computePDBValues(cr *databasev1beta1.PostgresCluster) (minAvailable *int32, maxUnavailable *int32) {
 	if cr.Spec.HA.MinAvailable != nil {
 		return cr.Spec.HA.MinAvailable, nil
 	}
@@ -544,7 +544,7 @@ func computePDBValues(cr *databasev1alpha1.PostgresCluster) (minAvailable *int32
 }
 
 // podAffinityForPostgresCluster returns pod anti-affinity based on HA settings. Returns nil when HA is nil.
-func podAffinityForPostgresCluster(cr *databasev1alpha1.PostgresCluster) *corev1.Affinity {
+func podAffinityForPostgresCluster(cr *databasev1beta1.PostgresCluster) *corev1.Affinity {
 	if cr.Spec.HA == nil {
 		return nil
 	}
@@ -583,7 +583,7 @@ func podAffinityForPostgresCluster(cr *databasev1alpha1.PostgresCluster) *corev1
 	}
 }
 
-func (r *PostgresClusterReconciler) reconcileNetworkPolicy(ctx context.Context, cr *databasev1alpha1.PostgresCluster) error {
+func (r *PostgresClusterReconciler) reconcileNetworkPolicy(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
 	name := fmt.Sprintf("%s-network-policy", cr.Name)
 
 	existing := &networkingv1.NetworkPolicy{}
@@ -656,5 +656,146 @@ func (r *PostgresClusterReconciler) reconcileNetworkPolicy(ctx context.Context, 
 
 	r.Recorder.Event(cr, corev1.EventTypeNormal, "NetworkPolicyCreated", name)
 	setNetworkSecuredCondition(cr, "NetworkSecured", "NetworkPolicy is configured")
+	return nil
+}
+
+// reconcileConnectionPool ensures the PgBouncer Deployment + Service exist when connection pooling is enabled.
+func (r *PostgresClusterReconciler) reconcileConnectionPool(ctx context.Context, cr *databasev1beta1.PostgresCluster) error {
+	deployName := fmt.Sprintf("%s-pooler", cr.Name)
+	svcName := fmt.Sprintf("%s-pooler", cr.Name)
+
+	if cr.Spec.ConnectionPool == nil || !cr.Spec.ConnectionPool.Enabled {
+		// Delete pooler Deployment if exists
+		existingDeploy := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: cr.Namespace}, existingDeploy); err == nil {
+			if err := r.Delete(ctx, existingDeploy); err != nil {
+				return err
+			}
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "PoolerDeploymentDeleted", deployName)
+		}
+		// Delete pooler Service if exists
+		existingSvc := &corev1.Service{}
+		if err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: cr.Namespace}, existingSvc); err == nil {
+			if err := r.Delete(ctx, existingSvc); err != nil {
+				return err
+			}
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "PoolerServiceDeleted", svcName)
+		}
+		clearConnectionPoolReadyCondition(cr, "ConnectionPoolDisabled", "Connection pooling is not enabled")
+		return nil
+	}
+
+	// --- Reconcile Deployment ---
+	existingDeploy := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: cr.Namespace}, existingDeploy)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if errors.IsNotFound(err) {
+		labels := labelsForPostgresCluster(cr)
+		labels["app.kubernetes.io/component"] = "pooler"
+		poolerLabels := map[string]string{
+			"app.kubernetes.io/instance":  cr.Name,
+			"app.kubernetes.io/component": "pooler",
+		}
+		replicas := int32(2)
+		credentialSecretName := fmt.Sprintf("%s-credentials", cr.Name)
+
+		deploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      deployName,
+				Namespace: cr.Namespace,
+				Labels:    labels,
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: poolerLabels},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: poolerLabels},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "pgbouncer",
+								Image: "registry.access.redhat.com/ubi9/ubi-micro:latest",
+								Command: []string{"/bin/sleep", "infinity"},
+								Ports: []corev1.ContainerPort{
+									{Name: "pgbouncer", ContainerPort: 6432, Protocol: corev1.ProtocolTCP},
+								},
+								Env: []corev1.EnvVar{
+									{Name: "POSTGRESQL_HOST", Value: fmt.Sprintf("%s-headless.%s.svc.cluster.local", cr.Name, cr.Namespace)},
+									{Name: "POSTGRESQL_PORT", Value: "5432"},
+									{Name: "PGBOUNCER_POOL_SIZE", Value: fmt.Sprintf("%d", cr.Spec.ConnectionPool.PoolSize)},
+									{Name: "PGBOUNCER_MAX_CLIENT_CONN", Value: fmt.Sprintf("%d", cr.Spec.ConnectionPool.MaxClientConnections)},
+									{Name: "PGBOUNCER_IDLE_TIMEOUT", Value: cr.Spec.ConnectionPool.IdleTimeout},
+								},
+								EnvFrom: []corev1.EnvFromSource{
+									{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: credentialSecretName}}},
+								},
+								Resources: corev1.ResourceRequirements{
+									Limits: corev1.ResourceList{
+										corev1.ResourceCPU:    resource.MustParse("100m"),
+										corev1.ResourceMemory: resource.MustParse("128Mi"),
+									},
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU:    resource.MustParse("50m"),
+										corev1.ResourceMemory: resource.MustParse("64Mi"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if err := controllerutil.SetControllerReference(cr, deploy, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, deploy); err != nil {
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "PoolerDeploymentFailed", err.Error())
+			return err
+		}
+		r.Recorder.Event(cr, corev1.EventTypeNormal, "PoolerDeploymentCreated", deployName)
+	}
+
+	// --- Reconcile Service ---
+	existingSvc := &corev1.Service{}
+	err = r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: cr.Namespace}, existingSvc)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if errors.IsNotFound(err) {
+		poolerLabels := map[string]string{
+			"app.kubernetes.io/instance":  cr.Name,
+			"app.kubernetes.io/component": "pooler",
+		}
+		svc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      svcName,
+				Namespace: cr.Namespace,
+				Labels:    labelsForPostgresCluster(cr),
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: poolerLabels,
+				Ports: []corev1.ServicePort{
+					{Name: "pgbouncer", Port: 6432, Protocol: corev1.ProtocolTCP},
+				},
+			},
+		}
+
+		if err := controllerutil.SetControllerReference(cr, svc, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, svc); err != nil {
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "PoolerServiceFailed", err.Error())
+			return err
+		}
+		r.Recorder.Event(cr, corev1.EventTypeNormal, "PoolerServiceCreated", svcName)
+	}
+
+	setConnectionPoolReadyCondition(cr, "ConnectionPoolReady",
+		fmt.Sprintf("PgBouncer pooler is configured at %s-pooler.%s.svc.cluster.local:6432", cr.Name, cr.Namespace))
+	cr.Status.PoolerEndpoint = fmt.Sprintf("%s-pooler.%s.svc.cluster.local:6432", cr.Name, cr.Namespace)
+	cr.Status.PoolerReady = true
 	return nil
 }
