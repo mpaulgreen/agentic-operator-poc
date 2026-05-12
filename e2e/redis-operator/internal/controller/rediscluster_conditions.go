@@ -19,7 +19,7 @@ package controller
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	cachev1alpha1 "github.com/example/redis-operator/api/v1alpha1"
+	cachev1beta1 "github.com/example/redis-operator/api/v1beta1"
 )
 
 // Condition type constants for RedisCluster.
@@ -40,7 +40,7 @@ const (
 )
 
 // setCondition adds or updates a condition on the RedisCluster status.
-func setCondition(cr *cachev1alpha1.RedisCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
+func setCondition(cr *cachev1beta1.RedisCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	now := metav1.Now()
 
 	// Search for existing condition
@@ -70,47 +70,47 @@ func setCondition(cr *cachev1alpha1.RedisCluster, conditionType string, status m
 }
 
 // setAvailableCondition sets the Available condition to True.
-func setAvailableCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func setAvailableCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionAvailable, metav1.ConditionTrue, reason, message)
 }
 
 // setUnavailableCondition sets the Available condition to False.
-func setUnavailableCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func setUnavailableCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionAvailable, metav1.ConditionFalse, reason, message)
 }
 
 // setProgressingCondition sets the Progressing condition to True.
-func setProgressingCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func setProgressingCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionProgressing, metav1.ConditionTrue, reason, message)
 }
 
 // clearProgressingCondition sets the Progressing condition to False.
-func clearProgressingCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func clearProgressingCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionProgressing, metav1.ConditionFalse, reason, message)
 }
 
 // setDegradedCondition sets the Degraded condition to True.
-func setDegradedCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func setDegradedCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionDegraded, metav1.ConditionTrue, reason, message)
 }
 
 // clearDegradedCondition sets the Degraded condition to False.
-func clearDegradedCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func clearDegradedCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionDegraded, metav1.ConditionFalse, reason, message)
 }
 
-func setSentinelReadyCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func setSentinelReadyCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionSentinelReady, metav1.ConditionTrue, reason, message)
 }
 
-func clearSentinelReadyCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func clearSentinelReadyCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionSentinelReady, metav1.ConditionFalse, reason, message)
 }
 
-func setNetworkSecuredCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func setNetworkSecuredCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionNetworkSecured, metav1.ConditionTrue, reason, message)
 }
 
-func clearNetworkSecuredCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+func clearNetworkSecuredCondition(cr *cachev1beta1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionNetworkSecured, metav1.ConditionFalse, reason, message)
 }

@@ -5,7 +5,7 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "cache.redis.example.com/v1alpha1",
+          "apiVersion": "cache.redis.example.com/v1beta1",
           "kind": "RedisCluster",
           "metadata": {
             "labels": {
@@ -32,7 +32,12 @@ metadata:
             },
             "auth": {
               "existingSecret": "redis-auth"
-            }
+            },
+            "tls": {
+              "enabled": true,
+              "secretName": "redis-tls"
+            },
+            "maxMemory": "512Mi"
           }
         }
       ]
@@ -43,7 +48,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/redis-operator
-  name: redis-operator.v0.3.0
+  name: redis-operator.v0.4.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -53,7 +58,7 @@ spec:
       displayName: Redis Cluster
       kind: RedisCluster
       name: redisclusters.cache.redis.example.com
-      version: v1alpha1
+      version: v1beta1
       resources:
       - kind: StatefulSet
         version: v1
@@ -94,6 +99,21 @@ spec:
       - path: sentinel.replicas
         displayName: Replicas
         description: Number of Sentinel instances
+      - path: tls
+        displayName: TLS
+        description: TLS/SSL configuration for Redis connections
+      - path: tls.enabled
+        displayName: TLS Enabled
+        description: Whether TLS is active for Redis connections
+      - path: tls.secretName
+        displayName: TLS Secret Name
+        description: Name of Secret containing tls.crt and tls.key
+      - path: tls.certManager
+        displayName: Cert Manager
+        description: Whether cert-manager should provision certificates
+      - path: maxMemory
+        displayName: Max Memory
+        description: Maximum memory Redis can use
       statusDescriptors:
       - path: phase
         displayName: Phase
@@ -113,6 +133,9 @@ spec:
       - path: sentinelEndpoint
         displayName: Sentinel Endpoint
         description: Sentinel service connection endpoint
+      - path: tlsEnabled
+        displayName: TLS Enabled
+        description: Whether TLS is currently active on the Redis cluster
   description: |
     ## Overview
     The Redis Operator manages Redis clusters on Kubernetes.
@@ -120,6 +143,12 @@ spec:
     Redis instances using StatefulSets, Services, Secrets, ConfigMaps,
     PodDisruptionBudgets for high availability, NetworkPolicies for
     cluster isolation, and webhooks for admission control.
+
+    ## v0.4.0 — API Versioning + TLS Support
+    - Added v1beta1 API version (storage version) with TLS and MaxMemory fields
+    - v1alpha1 API remains available for backward compatibility
+    - TLS support: enable encrypted connections with manual secrets or cert-manager
+    - MaxMemory: configure Redis memory limits via the CRD
   displayName: Redis Operator
   icon:
   - base64data: ""
@@ -273,7 +302,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/redis-operator:v0.3.0
+                image: quay.io/mpaulgreen/redis-operator:v0.4.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -360,25 +389,25 @@ spec:
   maintainers:
   - email: maintainer@example.com
     name: Maintainer
-  maturity: alpha
+  maturity: beta
   minKubeVersion: "1.25.0"
   provider:
     name: Example
     url: https://example.com
-  replaces: redis-operator.v0.2.0
-  version: 0.3.0
+  replaces: redis-operator.v0.3.0
+  version: 0.4.0
   webhookdefinitions:
   - admissionReviewVersions:
     - v1
     containerPort: 9443
     deploymentName: redis-operator-controller-manager
     failurePolicy: Fail
-    generateName: mrediscluster.kb.io
+    generateName: mredisclusterv1beta1.kb.io
     rules:
     - apiGroups:
       - cache.redis.example.com
       apiVersions:
-      - v1alpha1
+      - v1beta1
       operations:
       - CREATE
       - UPDATE
@@ -387,18 +416,18 @@ spec:
     sideEffects: None
     targetPort: 9443
     type: MutatingAdmissionWebhook
-    webhookPath: /mutate-cache-redis-example-com-v1alpha1-rediscluster
+    webhookPath: /mutate-cache-redis-example-com-v1beta1-rediscluster
   - admissionReviewVersions:
     - v1
     containerPort: 9443
     deploymentName: redis-operator-controller-manager
     failurePolicy: Fail
-    generateName: vrediscluster.kb.io
+    generateName: vredisclusterv1beta1.kb.io
     rules:
     - apiGroups:
       - cache.redis.example.com
       apiVersions:
-      - v1alpha1
+      - v1beta1
       operations:
       - CREATE
       - UPDATE
@@ -407,4 +436,4 @@ spec:
     sideEffects: None
     targetPort: 9443
     type: ValidatingAdmissionWebhook
-    webhookPath: /validate-cache-redis-example-com-v1alpha1-rediscluster
+    webhookPath: /validate-cache-redis-example-com-v1beta1-rediscluster

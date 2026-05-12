@@ -10,14 +10,14 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-cache-redis-example-com-v1alpha1-rediscluster
+      path: /mutate-cache-redis-example-com-v1beta1-rediscluster
   failurePolicy: Fail
-  name: mrediscluster.kb.io
+  name: mredisclusterv1beta1.kb.io
   rules:
   - apiGroups:
     - cache.redis.example.com
     apiVersions:
-    - v1alpha1
+    - v1beta1
     operations:
     - CREATE
     - UPDATE
@@ -36,14 +36,14 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-cache-redis-example-com-v1alpha1-rediscluster
+      path: /validate-cache-redis-example-com-v1beta1-rediscluster
   failurePolicy: Fail
-  name: vrediscluster.kb.io
+  name: vredisclusterv1beta1.kb.io
   rules:
   - apiGroups:
     - cache.redis.example.com
     apiVersions:
-    - v1alpha1
+    - v1beta1
     operations:
     - CREATE
     - UPDATE

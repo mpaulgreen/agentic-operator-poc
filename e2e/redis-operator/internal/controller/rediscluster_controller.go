@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	cachev1alpha1 "github.com/example/redis-operator/api/v1alpha1"
+	cachev1beta1 "github.com/example/redis-operator/api/v1beta1"
 )
 
 const (
@@ -66,7 +66,7 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	logger := log.FromContext(ctx)
 
 	// --- PHASE 1: FETCH ---
-	cr := &cachev1alpha1.RedisCluster{}
+	cr := &cachev1beta1.RedisCluster{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("RedisCluster resource not found, likely deleted")
@@ -140,7 +140,7 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 // handleDeletion handles the deletion of a RedisCluster resource.
-func (r *RedisClusterReconciler) handleDeletion(ctx context.Context, cr *cachev1alpha1.RedisCluster) (ctrl.Result, error) {
+func (r *RedisClusterReconciler) handleDeletion(ctx context.Context, cr *cachev1beta1.RedisCluster) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if controllerutil.ContainsFinalizer(cr, redisClusterFinalizer) {
@@ -164,7 +164,7 @@ func (r *RedisClusterReconciler) handleDeletion(ctx context.Context, cr *cachev1
 }
 
 // handleError records a warning event and returns a requeue result with the error.
-func (r *RedisClusterReconciler) handleError(ctx context.Context, cr *cachev1alpha1.RedisCluster, reason string, err error) (ctrl.Result, error) {
+func (r *RedisClusterReconciler) handleError(ctx context.Context, cr *cachev1beta1.RedisCluster, reason string, err error) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Error(err, "Reconciliation failed", "reason", reason)
 	r.Recorder.Event(cr, corev1.EventTypeWarning, reason, err.Error())
@@ -181,7 +181,7 @@ func (r *RedisClusterReconciler) handleError(ctx context.Context, cr *cachev1alp
 // SetupWithManager sets up the controller with the Manager.
 func (r *RedisClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&cachev1alpha1.RedisCluster{}).
+		For(&cachev1beta1.RedisCluster{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).

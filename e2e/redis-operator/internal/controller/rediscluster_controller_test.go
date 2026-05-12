@@ -34,7 +34,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	cachev1alpha1 "github.com/example/redis-operator/api/v1alpha1"
+	cachev1beta1 "github.com/example/redis-operator/api/v1beta1"
 )
 
 var _ = Describe("RedisCluster Controller", func() {
@@ -52,7 +52,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 		)
 
@@ -62,15 +62,15 @@ var _ = Describe("RedisCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3,
 					Version:  "7.4",
-					Storage: cachev1alpha1.StorageSpec{
+					Storage: cachev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -86,7 +86,7 @@ var _ = Describe("RedisCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &cachev1alpha1.RedisCluster{}
+			resource := &cachev1beta1.RedisCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				// Remove finalizer to allow cleanup
 				resource.Finalizers = nil
@@ -99,7 +99,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
 			Expect(err).NotTo(HaveOccurred())
 
-			updated := &cachev1alpha1.RedisCluster{}
+			updated := &cachev1beta1.RedisCluster{}
 			Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
 			Expect(updated.Finalizers).To(ContainElement("cache.redis.example.com/finalizer"))
 		})
@@ -158,7 +158,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was added
-			updated := &cachev1alpha1.RedisCluster{}
+			updated := &cachev1beta1.RedisCluster{}
 			Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
 			Expect(updated.Finalizers).NotTo(BeEmpty())
 
@@ -170,7 +170,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was removed (resource may or may not still exist)
-			deleted := &cachev1alpha1.RedisCluster{}
+			deleted := &cachev1beta1.RedisCluster{}
 			err = k8sClient.Get(ctx, key, deleted)
 			if err == nil {
 				Expect(deleted.Finalizers).To(BeEmpty())
@@ -188,7 +188,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 		)
 
@@ -198,15 +198,15 @@ var _ = Describe("RedisCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3,
 					Version:  "7.4",
-					Storage: cachev1alpha1.StorageSpec{
+					Storage: cachev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -224,7 +224,7 @@ var _ = Describe("RedisCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &cachev1alpha1.RedisCluster{}
+			resource := &cachev1beta1.RedisCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -276,7 +276,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 		)
 
@@ -286,15 +286,15 @@ var _ = Describe("RedisCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3,
 					Version:  "7.4",
-					Storage: cachev1alpha1.StorageSpec{
+					Storage: cachev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -311,7 +311,7 @@ var _ = Describe("RedisCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &cachev1alpha1.RedisCluster{}
+			resource := &cachev1beta1.RedisCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -365,7 +365,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 		)
 
@@ -375,15 +375,15 @@ var _ = Describe("RedisCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3,
 					Version:  "7.4",
-					Storage: cachev1alpha1.StorageSpec{
+					Storage: cachev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -400,7 +400,7 @@ var _ = Describe("RedisCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &cachev1alpha1.RedisCluster{}
+			resource := &cachev1beta1.RedisCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -455,7 +455,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 		)
 
@@ -465,15 +465,15 @@ var _ = Describe("RedisCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3,
 					Version:  "7.4",
-					Storage: cachev1alpha1.StorageSpec{
+					Storage: cachev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -490,7 +490,7 @@ var _ = Describe("RedisCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &cachev1alpha1.RedisCluster{}
+			resource := &cachev1beta1.RedisCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -545,7 +545,7 @@ var _ = Describe("RedisCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 		)
 
@@ -555,15 +555,15 @@ var _ = Describe("RedisCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3,
 					Version:  "7.4",
-					Storage: cachev1alpha1.StorageSpec{
+					Storage: cachev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -580,7 +580,7 @@ var _ = Describe("RedisCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &cachev1alpha1.RedisCluster{}
+			resource := &cachev1beta1.RedisCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -642,7 +642,7 @@ var _ = Describe("RedisCluster Controller", func() {
 	Context("When reconciling PodDisruptionBudget", func() {
 		var (
 			ctx        context.Context
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 			name       string
 			namespace  string
@@ -656,15 +656,15 @@ var _ = Describe("RedisCluster Controller", func() {
 			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3,
 					Version:  "7.4",
-					Storage:  cachev1alpha1.StorageSpec{Size: "1Gi"},
+					Storage:  cachev1beta1.StorageSpec{Size: "1Gi"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -751,7 +751,7 @@ var _ = Describe("RedisCluster Controller", func() {
 	Context("When reconciling Sentinel", func() {
 		var (
 			ctx        context.Context
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 			name       string
 			namespace  string
@@ -765,12 +765,12 @@ var _ = Describe("RedisCluster Controller", func() {
 			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3, Version: "7.4",
-					Storage: cachev1alpha1.StorageSpec{Size: "1Gi"},
-					Sentinel: &cachev1alpha1.SentinelSpec{
+					Storage: cachev1beta1.StorageSpec{Size: "1Gi"},
+					Sentinel: &cachev1beta1.SentinelSpec{
 						Enabled:  true,
 						Replicas: 3,
 					},
@@ -833,7 +833,7 @@ var _ = Describe("RedisCluster Controller", func() {
 	Context("When reconciling NetworkPolicy", func() {
 		var (
 			ctx        context.Context
-			cr         *cachev1alpha1.RedisCluster
+			cr         *cachev1beta1.RedisCluster
 			reconciler *RedisClusterReconciler
 			name       string
 			namespace  string
@@ -847,11 +847,11 @@ var _ = Describe("RedisCluster Controller", func() {
 			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 
-			cr = &cachev1alpha1.RedisCluster{
+			cr = &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Replicas: 3, Version: "7.4",
-					Storage: cachev1alpha1.StorageSpec{Size: "1Gi"},
+					Storage: cachev1beta1.StorageSpec{Size: "1Gi"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
@@ -911,11 +911,11 @@ var _ = Describe("RedisCluster Controller", func() {
 	// ============================================================
 	Context("When testing helper functions", func() {
 		It("should return correct labels with expected keys and values", func() {
-			cr := &cachev1alpha1.RedisCluster{
+			cr := &cachev1beta1.RedisCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "my-redis",
 				},
-				Spec: cachev1alpha1.RedisClusterSpec{
+				Spec: cachev1beta1.RedisClusterSpec{
 					Version: "7.4",
 				},
 			}

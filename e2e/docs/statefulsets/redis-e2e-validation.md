@@ -1525,3 +1525,501 @@ sleep 15
 | 22 | Webhook definitions in CSV | C.10 | Both paths |
 | 23 | NP RBAC in CSV | C.10 | networking.k8s.io |
 | 24 | Bundle validates | C.10 | No errors |
+
+---
+---
+
+# Scenario D: API Maturity + TLS (v0.4.0)
+
+Promotes the API to v1beta1 (storage version) and adds TLSSpec + maxMemory fields. No new Kubernetes resource (TLS is config-level). Built using:
+- **Step 1** (Generate): `designing-operator-api` SKILL (Workflow D) — Created api/v1beta1/ with storageversion, TLSSpec, maxMemory, v1beta1 webhook; deleted v1alpha1 webhook (Bug #16)
+- **Step 2** (Generate): `implementing-reconciliation` SKILL (Workflow B) — Migrated controller imports v1alpha1 → v1beta1
+- **Step 3a** (Test): `operator-test-generator` SUBAGENT (Workflow B) — Added v1beta1 webhook + TLS tests
+- **Step 3b** (Review): `operator-reviewer` SUBAGENT — Reviewed modified code
+- **Step 4** (Generate): `bundling-operator` SKILL (Workflow B) — Updated CSV v0.3.0 → v0.4.0, multi-version CRD, maturity beta, only v1beta1 webhookdefinitions
+- **Step 5** (Validate): `operator-bundle-validator` SUBAGENT — Validated updated bundle
+
+**Changes**: v1beta1 API (storage version) with TLSSpec (enabled, secretName, certManager) and maxMemory (*resource.Quantity), v1alpha1 webhook file deleted (Bug #16), only v1beta1 webhook registered in main.go, CRD conversion strategy: None (Bug #15), CSV v0.4.0 with replaces + maturity=beta + only v1beta1 webhookdefinitions.
+
+**Key Bug Regressions**: Bug #15 (CRD conversion strategy: None, no webhook patch), Bug #16 (only v1beta1 webhook, old v1alpha1 webhook file deleted).
+
+**Prerequisites**:
+- Scenario C completed successfully. All Scenario C CRs deleted.
+- cert-manager operator installed (from Scenario C).
+
+## Scenario D Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/redis-operator:v0.4.0
+export BUNDLE_IMG=quay.io/mpaulgreen/redis-operator-bundle:v0.4.0
+export NAMESPACE=redis-operator-system
+
+cd e2e/redis-operator
+```
+
+---
+
+## Phase D.1: Build and Deploy v0.4.0
+
+### D.1.1 Build the Operator Image
+
+```bash
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### D.1.2 Deploy the Operator
+
+#### Option A: `make deploy` (Development)
+
+```bash
+make manifests
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/redis-operator:v0.4.0|$IMG|g" bundle/manifests/redis-operator.clusterserviceversion.yaml
+
+# Refresh CRD in bundle (multi-version)
+make manifests
+cp config/crd/bases/cache.redis.example.com_redisclusters.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### D.1.3 Verify Deployment
+
+```bash
+# Operator pod running
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+
+# CRD has both versions
+oc get crd redisclusters.cache.redis.example.com -o jsonpath='{.spec.versions[*].name}' && echo ""
+
+# v1beta1 is storage version
+oc get crd redisclusters.cache.redis.example.com -o jsonpath='{range .spec.versions[*]}{.name}: storage={.storage}{"\n"}{end}'
+
+# CRD has TLS and maxMemory fields in v1beta1
+oc get crd redisclusters.cache.redis.example.com -o jsonpath='{.spec.versions[?(@.name=="v1beta1")].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+
+# No conversion webhook (Bug #15 — strategy: None)
+oc get crd redisclusters.cache.redis.example.com -o jsonpath='{.spec.conversion}' && echo " (should be empty or strategy: None)" || echo "No conversion section (correct — strategy: None)"
+
+# Webhook configs registered — only v1beta1 paths (Bug #16)
+oc get mutatingwebhookconfiguration -o yaml | grep -E 'webhookPath|path.*redis' | head -5
+oc get validatingwebhookconfiguration -o yaml | grep -E 'webhookPath|path.*redis' | head -5
+
+# Controller logs
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=20 | grep -E "Starting EventSource|Starting workers"
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.4.0 image
+- [ ] CRD has both v1alpha1 and v1beta1 versions
+- [ ] v1beta1 is the storage version (storage=true)
+- [ ] v1beta1 schema has tls and maxMemory fields
+- [ ] No conversion webhook section in CRD (Bug #15: strategy: None)
+- [ ] Only v1beta1 webhook paths registered (Bug #16)
+- [ ] Controller watching EventSources
+
+---
+
+## Phase D.2: v1beta1 API + Existing Features Regression
+
+### D.2.1 Create CR with v1beta1 API
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisCluster
+metadata:
+  name: redis-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.4"
+  storage:
+    size: 1Gi
+  sentinel:
+    enabled: true
+    replicas: 3
+EOF
+
+sleep 30
+```
+
+### D.2.2 Verify All A+B+C Resources Created
+
+```bash
+echo "=== Managed Resources ==="
+oc get secret redis-test-auth -n $NAMESPACE && echo "PASS: Secret" || echo "FAIL"
+oc get configmap redis-test-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+oc get service redis-test-headless -n $NAMESPACE && echo "PASS: Headless" || echo "FAIL"
+oc get service redis-test-client -n $NAMESPACE && echo "PASS: Client" || echo "FAIL"
+oc get statefulset redis-test -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL"
+oc get pdb redis-test-pdb -n $NAMESPACE && echo "PASS: PDB" || echo "FAIL"
+oc get deployment redis-test-sentinel -n $NAMESPACE && echo "PASS: Sentinel" || echo "FAIL"
+oc get service redis-test-sentinel -n $NAMESPACE && echo "PASS: Sentinel Svc" || echo "FAIL"
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy" || echo "FAIL"
+
+echo ""
+echo "=== Status ==="
+oc get rediscluster redis-test -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All 9 existing resources created (Secret, ConfigMap, Service×2, StatefulSet, PDB, Sentinel Deployment+Service, NetworkPolicy)
+- [ ] Status shows Running with v1beta1 apiVersion
+
+---
+
+## Phase D.3: TLS Webhook Validation
+
+### D.3.1 Reject TLS Enabled Without SecretName or CertManager
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisCluster
+metadata:
+  name: redis-bad-tls
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.4"
+  storage:
+    size: 1Gi
+  tls:
+    enabled: true
+EOF
+```
+
+**Expected**: Rejected — `tls.secretName is required when tls.enabled is true and tls.certManager is false`.
+
+### D.3.2 Allow TLS Enabled With SecretName
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisCluster
+metadata:
+  name: redis-tls-secret
+  namespace: $NAMESPACE
+spec:
+  replicas: 1
+  version: "7.4"
+  storage:
+    size: 1Gi
+  tls:
+    enabled: true
+    secretName: "my-tls-secret"
+EOF
+
+echo $?
+oc delete rediscluster redis-tls-secret -n $NAMESPACE 2>/dev/null
+```
+
+**Expected**: Accepted — TLS with secretName is valid.
+
+### D.3.3 Allow TLS Enabled With CertManager
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisCluster
+metadata:
+  name: redis-tls-cm
+  namespace: $NAMESPACE
+spec:
+  replicas: 1
+  version: "7.4"
+  storage:
+    size: 1Gi
+  tls:
+    enabled: true
+    certManager: true
+EOF
+
+echo $?
+oc delete rediscluster redis-tls-cm -n $NAMESPACE 2>/dev/null
+```
+
+**Expected**: Accepted — TLS with certManager is valid.
+
+### D.3.4 Existing Webhook Validations Still Work (v1beta1 Paths)
+
+```bash
+# Reject even sentinel replicas (quorum)
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisCluster
+metadata:
+  name: redis-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.4"
+  storage:
+    size: 1Gi
+  sentinel:
+    enabled: true
+    replicas: 4
+EOF
+```
+
+**Expected**: Rejected — sentinel.replicas must be odd for quorum.
+
+### D.3.5 Storage Reduction Still Rejected (v1beta1)
+
+```bash
+oc get rediscluster redis-test -n $NAMESPACE -o jsonpath='{.spec.storage.size}' && echo " (current size)"
+
+oc patch rediscluster redis-test -n $NAMESPACE --type merge -p '{"spec":{"storage":{"size":"500Mi"}}}' 2>&1
+```
+
+**Expected**: Rejected — storage size cannot be reduced.
+
+---
+
+## Phase D.4: v1alpha1 Backward Compatibility
+
+### D.4.1 v1alpha1 CRs Still Accessible
+
+```bash
+# Read the existing v1beta1 CR at v1alpha1 endpoint
+oc get rediscluster.v1alpha1.cache.redis.example.com redis-test -n $NAMESPACE -o jsonpath='{.apiVersion}' 2>&1 && echo "" || echo "v1alpha1 endpoint accessible (API server handles conversion)"
+```
+
+**Expected**: CR is accessible through v1alpha1 API endpoint (strategy: None means both versions share the same schema, no conversion needed for compatible fields).
+
+### D.4.2 Create CR with v1alpha1 API (Still Works)
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1alpha1
+kind: RedisCluster
+metadata:
+  name: redis-v1alpha1-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 1
+  version: "7.4"
+  storage:
+    size: 1Gi
+EOF
+
+sleep 10
+oc get rediscluster redis-v1alpha1-test -n $NAMESPACE -o wide
+oc delete rediscluster redis-v1alpha1-test -n $NAMESPACE
+```
+
+**Expected**: v1alpha1 CRs can still be created and managed.
+
+---
+
+## Phase D.5: Webhook Defaulting (v1beta1)
+
+### D.5.1 Verify Defaults Still Work via v1beta1
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisCluster
+metadata:
+  name: redis-defaults-v1beta1
+  namespace: $NAMESPACE
+spec:
+  storage:
+    size: 1Gi
+EOF
+
+sleep 5
+oc get rediscluster redis-defaults-v1beta1 -n $NAMESPACE -o jsonpath='{.spec.replicas}' && echo " replicas (should be 3)"
+oc get rediscluster redis-defaults-v1beta1 -n $NAMESPACE -o jsonpath='{.spec.version}' && echo " version (should be 7.4)"
+
+oc delete rediscluster redis-defaults-v1beta1 -n $NAMESPACE
+```
+
+**Expected**:
+- [ ] `replicas` defaulted to 3
+- [ ] `version` defaulted to "7.4"
+
+---
+
+## Phase D.6: Idempotency
+
+### D.6.1 Re-reconcile
+
+```bash
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment -l control-plane=controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "Secrets: $(oc get secret -n $NAMESPACE 2>&1 | grep -c redis-test-auth) (should be 1)"
+echo "ConfigMaps: $(oc get configmap -n $NAMESPACE 2>&1 | grep -c redis-test-config) (should be 1)"
+echo "StatefulSets: $(oc get statefulset -n $NAMESPACE 2>&1 | grep -c 'redis-test ') (should be 1)"
+echo "Sentinel Deployments: $(oc get deployment -n $NAMESPACE 2>&1 | grep -c redis-test-sentinel) (should be 1)"
+echo "NetworkPolicies: $(oc get networkpolicy -n $NAMESPACE 2>&1 | grep -c redis-test) (should be 1)"
+echo "PDBs: $(oc get pdb -n $NAMESPACE 2>&1 | grep -c redis-test-pdb) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each, no duplicates.
+
+---
+
+## Phase D.7: Delete CR — All Resources
+
+### D.7.1 Delete and Verify All Resources Cleaned
+
+```bash
+oc delete rediscluster redis-test -n $NAMESPACE
+sleep 15
+
+oc get secret redis-test-auth -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Secret"
+oc get configmap redis-test-config -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: ConfigMap"
+oc get service redis-test-headless -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Headless"
+oc get service redis-test-client -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Client"
+oc get statefulset redis-test -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: StatefulSet"
+oc get pdb redis-test-pdb -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: PDB"
+oc get deployment redis-test-sentinel -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Sentinel Deploy"
+oc get service redis-test-sentinel -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Sentinel Svc"
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: NetworkPolicy"
+```
+
+**Expected**:
+- [ ] All 9 managed resources garbage collected
+
+---
+
+## Phase D.8: RBAC Verification
+
+### D.8.1 Verify RBAC Still Works
+
+```bash
+oc auth can-i create statefulsets --as=system:serviceaccount:redis-operator-system:redis-operator-controller-manager -n redis-operator-system && echo "PASS: StatefulSets" || echo "FAIL"
+oc auth can-i create networkpolicies --as=system:serviceaccount:redis-operator-system:redis-operator-controller-manager -n redis-operator-system && echo "PASS: NetworkPolicies" || echo "FAIL"
+oc auth can-i create deployments --as=system:serviceaccount:redis-operator-system:redis-operator-controller-manager -n redis-operator-system && echo "PASS: Deployments" || echo "FAIL"
+```
+
+**Expected**: All return "yes".
+
+---
+
+## Phase D.9: OLM Bundle Validation
+
+### D.9.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*redis-operator.v' bundle/manifests/redis-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/redis-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/redis-operator.clusterserviceversion.yaml
+grep '^  maturity:' bundle/manifests/redis-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `redis-operator.v0.4.0`
+- [ ] replaces: `redis-operator.v0.3.0`
+- [ ] version: `0.4.0`
+- [ ] maturity: `beta`
+
+### D.9.2 Verify Multi-Version CRD
+
+```bash
+grep 'name: v1' bundle/manifests/cache.redis.example.com_redisclusters.yaml
+grep 'storage:' bundle/manifests/cache.redis.example.com_redisclusters.yaml | head -4
+```
+
+**Expected**: Both v1alpha1 and v1beta1 listed, v1beta1 has storage: true.
+
+### D.9.3 Verify Only v1beta1 Webhook Definitions (Bug #16)
+
+```bash
+grep 'webhookPath' bundle/manifests/redis-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] Only v1beta1 webhook paths: `/mutate-cache-redis-example-com-v1beta1-rediscluster` and `/validate-cache-redis-example-com-v1beta1-rediscluster`
+- [ ] NO v1alpha1 webhook paths present
+
+### D.9.4 Verify TLS Descriptors
+
+```bash
+grep -E 'tls|maxMemory|tlsEnabled' bundle/manifests/redis-operator.clusterserviceversion.yaml | grep 'path:' | head -10
+```
+
+**Expected**: specDescriptors for tls, tls.enabled, tls.secretName, tls.certManager, maxMemory; statusDescriptors for tlsEnabled.
+
+### D.9.5 No Conversion Webhook Patch (Bug #15)
+
+```bash
+# Verify kustomize build does not inject conversion webhook
+ls config/crd/patches/ 2>/dev/null | grep -i 'webhook\|conversion' && echo "FAIL: Conversion webhook patch exists" || echo "PASS: No conversion webhook patch"
+```
+
+**Expected**: No conversion webhook patch files in config/crd/patches/.
+
+### D.9.6 Bundle Validate
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario D Cleanup
+
+```bash
+oc delete rediscluster --all -n $NAMESPACE
+sleep 15
+
+# Undeploy the operator:
+make undeploy                                                    # if deployed with make deploy
+# operator-sdk cleanup redis-operator --namespace $NAMESPACE       # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario D Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | Operator deploys with v0.4.0 image | D.1 | Pod Running |
+| 2 | CRD has v1alpha1 and v1beta1 | D.1 | Both versions present |
+| 3 | v1beta1 is storage version | D.1 | storage=true |
+| 4 | v1beta1 has tls + maxMemory fields | D.1 | In CRD schema |
+| 5 | No CRD conversion webhook (Bug #15) | D.1 | strategy: None |
+| 6 | Only v1beta1 webhook paths (Bug #16) | D.1 | No v1alpha1 webhooks |
+| 7 | All A+B+C resources work with v1beta1 CR | D.2 | 9 resources created |
+| 8 | Reject TLS enabled without secretName/certManager | D.3 | Webhook validation |
+| 9 | Allow TLS with secretName | D.3 | Accepted |
+| 10 | Allow TLS with certManager | D.3 | Accepted |
+| 11 | Sentinel quorum validation still works | D.3 | Rejected (v1beta1 path) |
+| 12 | Storage reduction still rejected | D.3 | Update validation |
+| 13 | v1alpha1 CRs still accessible | D.4 | Backward compatible |
+| 14 | v1alpha1 CRs can still be created | D.4 | Accepted |
+| 15 | Webhook defaults still work (v1beta1) | D.5 | replicas=3, version=7.4 |
+| 16 | Idempotent — no duplicate resources | D.6 | Exactly 1 each |
+| 17 | All 9 resources cleaned on CR delete | D.7 | No orphans |
+| 18 | RBAC works | D.8 | can-i returns yes |
+| 19 | CSV version 0.4.0 with replaces | D.9 | Correct upgrade path |
+| 20 | maturity: beta | D.9 | Upgraded from alpha |
+| 21 | Multi-version CRD (v1alpha1 + v1beta1) | D.9 | v1beta1 storage |
+| 22 | Only v1beta1 webhookdefinitions (Bug #16) | D.9 | No v1alpha1 paths |
+| 23 | TLS descriptors in CSV | D.9 | tls.* + maxMemory |
+| 24 | No conversion webhook patch (Bug #15) | D.9 | No patch files |
+| 25 | Bundle validates | D.9 | No errors |

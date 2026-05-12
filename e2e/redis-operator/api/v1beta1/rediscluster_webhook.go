@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1beta1
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-var redisclusterlog = logf.Log.WithName("rediscluster-resource")
+var redisclusterlog = logf.Log.WithName("rediscluster-v1beta1-resource")
 
 func (r *RedisCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -35,7 +35,7 @@ func (r *RedisCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-cache-redis-example-com-v1alpha1-rediscluster,mutating=true,failurePolicy=fail,sideEffects=None,groups=cache.redis.example.com,resources=redisclusters,verbs=create;update,versions=v1alpha1,name=mrediscluster.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/mutate-cache-redis-example-com-v1beta1-rediscluster,mutating=true,failurePolicy=fail,sideEffects=None,groups=cache.redis.example.com,resources=redisclusters,verbs=create;update,versions=v1beta1,name=mredisclusterv1beta1.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &RedisCluster{}
 
@@ -54,7 +54,7 @@ func (r *RedisCluster) Default() {
 	}
 }
 
-//+kubebuilder:webhook:path=/validate-cache-redis-example-com-v1alpha1-rediscluster,mutating=false,failurePolicy=fail,sideEffects=None,groups=cache.redis.example.com,resources=redisclusters,verbs=create;update,versions=v1alpha1,name=vrediscluster.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-cache-redis-example-com-v1beta1-rediscluster,mutating=false,failurePolicy=fail,sideEffects=None,groups=cache.redis.example.com,resources=redisclusters,verbs=create;update,versions=v1beta1,name=vredisclusterv1beta1.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &RedisCluster{}
 
@@ -105,6 +105,12 @@ func (r *RedisCluster) validateRedisCluster() error {
 	if r.Spec.Auth != nil {
 		if r.Spec.Auth.Password != "" && r.Spec.Auth.ExistingSecret != "" {
 			return fmt.Errorf("auth.password and auth.existingSecret are mutually exclusive")
+		}
+	}
+	// TLS validation: if tls.enabled is true, either secretName or certManager must be provided
+	if r.Spec.TLS != nil && r.Spec.TLS.Enabled {
+		if r.Spec.TLS.SecretName == "" && !r.Spec.TLS.CertManager {
+			return fmt.Errorf("tls.secretName is required when tls.enabled is true and tls.certManager is false")
 		}
 	}
 	return nil

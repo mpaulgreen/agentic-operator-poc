@@ -22,7 +22,7 @@ import (
 	"math/big"
 	"strings"
 
-	cachev1alpha1 "github.com/example/redis-operator/api/v1alpha1"
+	cachev1beta1 "github.com/example/redis-operator/api/v1beta1"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 )
 
 // labelsForRedisCluster returns the standard labels for all resources managed by the operator.
-func labelsForRedisCluster(cr *cachev1alpha1.RedisCluster) map[string]string {
+func labelsForRedisCluster(cr *cachev1beta1.RedisCluster) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "redis",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -42,7 +42,7 @@ func labelsForRedisCluster(cr *cachev1alpha1.RedisCluster) map[string]string {
 }
 
 // imageForRedisCluster returns the container image for the given Redis version.
-func imageForRedisCluster(cr *cachev1alpha1.RedisCluster) string {
+func imageForRedisCluster(cr *cachev1beta1.RedisCluster) string {
 	majorVersion := strings.Split(cr.Spec.Version, ".")[0]
 	return fmt.Sprintf("registry.redhat.io/rhel9/redis-%s", majorVersion)
 }

@@ -32,13 +32,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	cachev1alpha1 "github.com/example/redis-operator/api/v1alpha1"
+	cachev1beta1 "github.com/example/redis-operator/api/v1beta1"
 )
 
 // reconcileSecret ensures the Redis authentication Secret exists.
 // Secret name: <name>-auth
 // Keys: REDIS_PASSWORD
-func (r *RedisClusterReconciler) reconcileSecret(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) reconcileSecret(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	name := fmt.Sprintf("%s-auth", cr.Name)
 
 	// If auth uses an existing secret, skip creation
@@ -92,7 +92,7 @@ func (r *RedisClusterReconciler) reconcileSecret(ctx context.Context, cr *cachev
 // reconcileConfigMap ensures the Redis configuration ConfigMap exists.
 // ConfigMap name: <name>-config
 // Key: redis.conf with bind, protected-mode, port, maxmemory-policy settings
-func (r *RedisClusterReconciler) reconcileConfigMap(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) reconcileConfigMap(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	name := fmt.Sprintf("%s-config", cr.Name)
 
 	// 1. CHECK if exists
@@ -135,7 +135,7 @@ func (r *RedisClusterReconciler) reconcileConfigMap(ctx context.Context, cr *cac
 
 // reconcileHeadlessService ensures the headless Service exists for StatefulSet DNS.
 // Service name: <name>-headless, ClusterIP None, port 6379
-func (r *RedisClusterReconciler) reconcileHeadlessService(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) reconcileHeadlessService(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	name := fmt.Sprintf("%s-headless", cr.Name)
 
 	// 1. CHECK if exists
@@ -186,7 +186,7 @@ func (r *RedisClusterReconciler) reconcileHeadlessService(ctx context.Context, c
 
 // reconcileClientService ensures the client-facing Service exists.
 // Service name: <name>-client, regular ClusterIP, port 6379
-func (r *RedisClusterReconciler) reconcileClientService(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) reconcileClientService(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	name := fmt.Sprintf("%s-client", cr.Name)
 
 	// 1. CHECK if exists
@@ -238,7 +238,7 @@ func (r *RedisClusterReconciler) reconcileClientService(ctx context.Context, cr 
 // reconcileStatefulSet ensures the Redis StatefulSet exists and is up to date.
 // Image: registry.redhat.io/rhel9/redis-7 (OpenShift-compatible)
 // Data dir: /var/lib/redis/data, Config dir: /etc/redis/
-func (r *RedisClusterReconciler) reconcileStatefulSet(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) reconcileStatefulSet(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	name := cr.Name
 
 	// 1. CHECK if exists
@@ -404,7 +404,7 @@ func (r *RedisClusterReconciler) reconcileStatefulSet(ctx context.Context, cr *c
 // reconcilePodDisruptionBudget ensures the PDB exists when replicas > 1.
 // PDB name: <name>-pdb
 // Only created when spec.replicas > 1.
-func (r *RedisClusterReconciler) reconcilePodDisruptionBudget(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) reconcilePodDisruptionBudget(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	name := fmt.Sprintf("%s-pdb", cr.Name)
 
 	if cr.Spec.Replicas <= 1 {
@@ -484,7 +484,7 @@ func (r *RedisClusterReconciler) reconcilePodDisruptionBudget(ctx context.Contex
 
 // podAffinityForRedisCluster returns pod anti-affinity to spread replicas across nodes.
 // Returns nil when replicas <= 1.
-func podAffinityForRedisCluster(cr *cachev1alpha1.RedisCluster) *corev1.Affinity {
+func podAffinityForRedisCluster(cr *cachev1beta1.RedisCluster) *corev1.Affinity {
 	if cr.Spec.Replicas <= 1 {
 		return nil
 	}
@@ -511,7 +511,7 @@ func podAffinityForRedisCluster(cr *cachev1alpha1.RedisCluster) *corev1.Affinity
 }
 
 // reconcileSentinel ensures the Sentinel Deployment + Service exist when sentinel is enabled.
-func (r *RedisClusterReconciler) reconcileSentinel(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) reconcileSentinel(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	deployName := fmt.Sprintf("%s-sentinel", cr.Name)
 	svcName := fmt.Sprintf("%s-sentinel", cr.Name)
 
@@ -633,7 +633,7 @@ func (r *RedisClusterReconciler) reconcileSentinel(ctx context.Context, cr *cach
 // NetworkPolicy name: <name>-network-policy
 // Ingress: allows ports 6379+26379 from same namespace
 // Egress: allows DNS (53 TCP/UDP) + intra-cluster replication (6379)
-func (r *RedisClusterReconciler) reconcileNetworkPolicy(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) reconcileNetworkPolicy(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	name := fmt.Sprintf("%s-network-policy", cr.Name)
 
 	// 1. CHECK if exists

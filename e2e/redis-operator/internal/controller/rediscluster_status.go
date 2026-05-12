@@ -24,11 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
-	cachev1alpha1 "github.com/example/redis-operator/api/v1alpha1"
+	cachev1beta1 "github.com/example/redis-operator/api/v1beta1"
 )
 
 // updateStatus fetches the StatefulSet and updates the RedisCluster status accordingly.
-func (r *RedisClusterReconciler) updateStatus(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+func (r *RedisClusterReconciler) updateStatus(ctx context.Context, cr *cachev1beta1.RedisCluster) error {
 	// Fetch the StatefulSet to read its status
 	sts := &appsv1.StatefulSet{}
 	err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, sts)
@@ -56,7 +56,7 @@ func (r *RedisClusterReconciler) updateStatus(ctx context.Context, cr *cachev1al
 }
 
 // updatePhase sets the phase and conditions based on StatefulSet readiness.
-func (r *RedisClusterReconciler) updatePhase(cr *cachev1alpha1.RedisCluster, sts *appsv1.StatefulSet) {
+func (r *RedisClusterReconciler) updatePhase(cr *cachev1beta1.RedisCluster, sts *appsv1.StatefulSet) {
 	desired := cr.Spec.Replicas
 	ready := sts.Status.ReadyReplicas
 

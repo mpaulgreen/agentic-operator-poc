@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1beta1
 
 import (
 	"testing"
@@ -74,5 +74,76 @@ func TestValidate_StorageSizeReduction(t *testing.T) {
 	_, err := cr.ValidateUpdate(old)
 	if err == nil {
 		t.Error("expected error for storage size reduction")
+	}
+}
+
+// TLS-specific validation tests
+
+func TestValidate_TLSEnabledWithoutSecretOrCertManager(t *testing.T) {
+	cr := &RedisCluster{
+		Spec: RedisClusterSpec{
+			Replicas: 3, Version: "7.4",
+			Storage: StorageSpec{Size: "1Gi"},
+			TLS:     &TLSSpec{Enabled: true},
+		},
+	}
+	_, err := cr.ValidateCreate()
+	if err == nil {
+		t.Error("expected error for tls.enabled without secretName or certManager")
+	}
+}
+
+func TestValidate_TLSEnabledWithSecretName(t *testing.T) {
+	cr := &RedisCluster{
+		Spec: RedisClusterSpec{
+			Replicas: 3, Version: "7.4",
+			Storage: StorageSpec{Size: "1Gi"},
+			TLS:     &TLSSpec{Enabled: true, SecretName: "redis-tls"},
+		},
+	}
+	_, err := cr.ValidateCreate()
+	if err != nil {
+		t.Errorf("expected no error for tls with secretName, got: %v", err)
+	}
+}
+
+func TestValidate_TLSEnabledWithCertManager(t *testing.T) {
+	cr := &RedisCluster{
+		Spec: RedisClusterSpec{
+			Replicas: 3, Version: "7.4",
+			Storage: StorageSpec{Size: "1Gi"},
+			TLS:     &TLSSpec{Enabled: true, CertManager: true},
+		},
+	}
+	_, err := cr.ValidateCreate()
+	if err != nil {
+		t.Errorf("expected no error for tls with certManager, got: %v", err)
+	}
+}
+
+func TestValidate_TLSDisabledNoError(t *testing.T) {
+	cr := &RedisCluster{
+		Spec: RedisClusterSpec{
+			Replicas: 3, Version: "7.4",
+			Storage: StorageSpec{Size: "1Gi"},
+			TLS:     &TLSSpec{Enabled: false},
+		},
+	}
+	_, err := cr.ValidateCreate()
+	if err != nil {
+		t.Errorf("expected no error for disabled tls, got: %v", err)
+	}
+}
+
+func TestValidate_TLSNilNoError(t *testing.T) {
+	cr := &RedisCluster{
+		Spec: RedisClusterSpec{
+			Replicas: 3, Version: "7.4",
+			Storage: StorageSpec{Size: "1Gi"},
+		},
+	}
+	_, err := cr.ValidateCreate()
+	if err != nil {
+		t.Errorf("expected no error for nil tls, got: %v", err)
 	}
 }

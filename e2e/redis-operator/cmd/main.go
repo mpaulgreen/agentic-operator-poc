@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	cachev1alpha1 "github.com/example/redis-operator/api/v1alpha1"
+	cachev1beta1 "github.com/example/redis-operator/api/v1beta1"
 	"github.com/example/redis-operator/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
@@ -49,6 +50,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(cachev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(cachev1beta1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -132,8 +134,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "RedisCluster")
 		os.Exit(1)
 	}
-	if err = (&cachev1alpha1.RedisCluster{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "RedisCluster")
+	// Only register v1beta1 webhook — it is the storage version and a superset of v1alpha1.
+	// Registering both causes v1alpha1 webhook to strip v1beta1-only fields (tls, maxMemory)
+	// during admission, since v1alpha1 types don't have those fields.
+	if err = (&cachev1beta1.RedisCluster{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "RedisCluster v1beta1")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
