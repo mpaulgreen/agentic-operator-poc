@@ -26,6 +26,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -823,6 +824,85 @@ var _ = Describe("RedisCluster Controller", func() {
 			Expect(reconciler.reconcileSentinel(ctx, cr)).To(Succeed())
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-sentinel", name), Namespace: namespace}, deploy)).To(Succeed())
 			Expect(deploy.ResourceVersion).To(Equal(originalVersion))
+		})
+	})
+
+	// ============================================================
+	// Per-Method Tests: reconcileNetworkPolicy
+	// ============================================================
+	Context("When reconciling NetworkPolicy", func() {
+		var (
+			ctx        context.Context
+			cr         *cachev1alpha1.RedisCluster
+			reconciler *RedisClusterReconciler
+			name       string
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			namespace = fmt.Sprintf("test-np-%d", time.Now().UnixNano())
+			name = "redis-np-test"
+
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			cr = &cachev1alpha1.RedisCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+				Spec: cachev1alpha1.RedisClusterSpec{
+					Replicas: 3, Version: "7.4",
+					Storage: cachev1alpha1.StorageSpec{Size: "1Gi"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cr)).To(Succeed())
+
+			reconciler = &RedisClusterReconciler{
+				Client: k8sClient, Scheme: k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+		})
+
+		AfterEach(func() {
+			_ = k8sClient.Delete(ctx, cr)
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			_ = k8sClient.Delete(ctx, ns)
+		})
+
+		It("should create NetworkPolicy with ingress and egress rules", func() {
+			Expect(reconciler.reconcileNetworkPolicy(ctx, cr)).To(Succeed())
+
+			np := &networkingv1.NetworkPolicy{}
+			npKey := types.NamespacedName{Name: fmt.Sprintf("%s-network-policy", name), Namespace: namespace}
+			Expect(k8sClient.Get(ctx, npKey, np)).To(Succeed())
+
+			// Verify ingress allows ports 6379 and 26379
+			Expect(np.Spec.Ingress).To(HaveLen(1))
+			Expect(np.Spec.Ingress[0].Ports).To(HaveLen(2))
+
+			// Verify egress has DNS and replication rules
+			Expect(np.Spec.Egress).To(HaveLen(2))
+
+			// Verify policy types
+			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeIngress))
+			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
+
+			// Verify owner reference
+			Expect(np.OwnerReferences).To(HaveLen(1))
+			Expect(np.OwnerReferences[0].Name).To(Equal(name))
+		})
+
+		It("should not recreate existing NetworkPolicy (idempotent)", func() {
+			Expect(reconciler.reconcileNetworkPolicy(ctx, cr)).To(Succeed())
+
+			np := &networkingv1.NetworkPolicy{}
+			npKey := types.NamespacedName{Name: fmt.Sprintf("%s-network-policy", name), Namespace: namespace}
+			Expect(k8sClient.Get(ctx, npKey, np)).To(Succeed())
+			originalVersion := np.ResourceVersion
+
+			Expect(reconciler.reconcileNetworkPolicy(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, npKey, np)).To(Succeed())
+			Expect(np.ResourceVersion).To(Equal(originalVersion))
 		})
 	})
 

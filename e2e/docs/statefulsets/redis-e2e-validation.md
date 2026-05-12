@@ -1035,3 +1035,493 @@ sleep 15
 | 20 | Sentinel descriptors in CSV | B.9 | sentinel.* fields present |
 | 21 | Deployment RBAC in CSV | B.9 | apps/deployments |
 | 22 | Bundle validates | B.9 | No errors |
+
+---
+---
+
+# Scenario C: Webhooks + Network Security (v0.3.0)
+
+Adds defaulting/validating admission webhooks + NetworkPolicy to the Redis operator. Built using:
+- **Step 1** (Generate): `designing-operator-api` SKILL (Workflow C) — Added webhook handler + 9 config files
+- **Step 2** (Generate): `implementing-reconciliation` SKILL (Workflow B) — Added reconcileNetworkPolicy
+- **Step 3a** (Test): `operator-test-generator` SUBAGENT (Workflow B) — Added NP + webhook tests
+- **Step 3b** (Review): `operator-reviewer` SUBAGENT — Reviewed modified code
+- **Step 4** (Generate): `bundling-operator` SKILL (Workflow B) — Updated CSV v0.2.0 → v0.3.0
+- **Step 5** (Validate): `operator-bundle-validator` SUBAGENT — Validated updated bundle
+
+**Changes**: Webhook handler (Default + ValidateCreate/Update/Delete), 9 webhook config files with kustomize replacements, reconcileNetworkPolicy (ports 6379+26379), NetworkSecured condition, CSV v0.3.0 with replaces + webhookdefinitions.
+
+**Prerequisites**:
+- Scenario B completed successfully. All Scenario B CRs deleted.
+- **cert-manager operator** installed on OpenShift.
+
+## Scenario C Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/redis-operator:v0.3.0
+export BUNDLE_IMG=quay.io/mpaulgreen/redis-operator-bundle:v0.3.0
+export NAMESPACE=redis-operator-system
+
+cd e2e/redis-operator
+```
+
+---
+
+## Phase C.1: Build and Deploy v0.3.0
+
+### C.1.1 Verify cert-manager is Running
+
+```bash
+oc get pods -n cert-manager 2>/dev/null || oc get pods -n openshift-cert-manager 2>/dev/null || echo "cert-manager not found — install it first"
+```
+
+### C.1.2 Build the Operator Image
+
+```bash
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### C.1.3 Deploy the Operator
+
+#### Option A: `make deploy` (Development)
+
+```bash
+make manifests
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/redis-operator:v0.3.0|$IMG|g" bundle/manifests/redis-operator.clusterserviceversion.yaml
+
+# Refresh CRD in bundle
+make manifests
+cp config/crd/bases/cache.redis.example.com_redisclusters.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### C.1.4 Verify Deployment
+
+```bash
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+
+# Webhook service and certificate
+oc get service -n $NAMESPACE | grep webhook
+oc get certificate -n $NAMESPACE 2>/dev/null || echo "Check cert-manager namespace"
+
+# Webhook configurations registered
+oc get mutatingwebhookconfiguration | grep redis
+oc get validatingwebhookconfiguration | grep redis
+
+# Controller logs — should show 8 EventSources (added NetworkPolicy)
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=20 | grep -E "Starting EventSource|Starting workers"
+
+# CRD has sentinel field from Scenario B
+oc get crd redisclusters.cache.redis.example.com -o jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.3.0 image
+- [ ] Webhook Service exists
+- [ ] MutatingWebhookConfiguration and ValidatingWebhookConfiguration registered
+- [ ] Controller watching 8 EventSources (added NetworkPolicy)
+- [ ] CRD has all fields: auth, replicas, resources, sentinel, storage, version
+
+---
+
+## Phase C.2: Existing Features Regression
+
+### C.2.1 Create CR with Sentinel
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1alpha1
+kind: RedisCluster
+metadata:
+  name: redis-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.4"
+  storage:
+    size: 1Gi
+  sentinel:
+    enabled: true
+    replicas: 3
+EOF
+
+sleep 30
+```
+
+### C.2.2 Verify All A+B Resources Created + NetworkPolicy
+
+```bash
+echo "=== Managed Resources ==="
+oc get secret redis-test-auth -n $NAMESPACE && echo "PASS: Secret" || echo "FAIL"
+oc get configmap redis-test-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+oc get service redis-test-headless -n $NAMESPACE && echo "PASS: Headless" || echo "FAIL"
+oc get service redis-test-client -n $NAMESPACE && echo "PASS: Client" || echo "FAIL"
+oc get statefulset redis-test -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL"
+oc get pdb redis-test-pdb -n $NAMESPACE && echo "PASS: PDB" || echo "FAIL"
+oc get deployment redis-test-sentinel -n $NAMESPACE && echo "PASS: Sentinel" || echo "FAIL"
+
+echo ""
+echo "=== New: NetworkPolicy ==="
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy" || echo "FAIL"
+
+echo ""
+echo "=== Status ==="
+oc get rediscluster redis-test -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All 8 existing resources created (Secret, ConfigMap, Service×2, StatefulSet, PDB, Sentinel Deployment+Service)
+- [ ] NetworkPolicy `redis-test-network-policy` created (new — always created)
+- [ ] Status shows Running
+
+---
+
+## Phase C.3: Webhook Defaulting
+
+### C.3.1 Create CR with Missing Fields
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1alpha1
+kind: RedisCluster
+metadata:
+  name: redis-defaults
+  namespace: $NAMESPACE
+spec:
+  storage:
+    size: 1Gi
+EOF
+
+sleep 5
+
+echo "=== Defaulted Fields ==="
+oc get rediscluster redis-defaults -n $NAMESPACE -o jsonpath='{.spec.replicas}' && echo " replicas (should be 3)"
+oc get rediscluster redis-defaults -n $NAMESPACE -o jsonpath='{.spec.version}' && echo " version (should be 7.4)"
+```
+
+**Expected**:
+- [ ] `replicas` defaulted to 3
+- [ ] `version` defaulted to "7.4"
+
+### C.3.2 Create CR with Sentinel Enabled but No Replicas
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1alpha1
+kind: RedisCluster
+metadata:
+  name: redis-sentinel-default
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.4"
+  storage:
+    size: 1Gi
+  sentinel:
+    enabled: true
+EOF
+
+sleep 5
+
+oc get rediscluster redis-sentinel-default -n $NAMESPACE -o jsonpath='{.spec.sentinel.replicas}' && echo " sentinel.replicas (should be 3)"
+```
+
+**Expected**:
+- [ ] `sentinel.replicas` defaulted to 3
+
+### C.3.3 Cleanup Defaulting Test CRs
+
+```bash
+oc delete rediscluster redis-defaults redis-sentinel-default -n $NAMESPACE
+sleep 10
+```
+
+---
+
+## Phase C.4: Webhook Validation (Create)
+
+### C.4.1 Reject Even Sentinel Replicas (Quorum)
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1alpha1
+kind: RedisCluster
+metadata:
+  name: redis-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.4"
+  storage:
+    size: 1Gi
+  sentinel:
+    enabled: true
+    replicas: 4
+EOF
+```
+
+**Expected**: Rejected — sentinel.replicas must be odd for quorum.
+
+### C.4.2 Reject Both auth.password and auth.existingSecret
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1alpha1
+kind: RedisCluster
+metadata:
+  name: redis-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.4"
+  storage:
+    size: 1Gi
+  auth:
+    password: "mypassword"
+    existingSecret: "my-secret"
+EOF
+```
+
+**Expected**: Rejected — auth.password and auth.existingSecret are mutually exclusive.
+
+### C.4.3 Reject Replicas Less Than 1
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1alpha1
+kind: RedisCluster
+metadata:
+  name: redis-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 0
+  version: "7.4"
+  storage:
+    size: 1Gi
+EOF
+```
+
+**Expected**: Rejected — replicas must be >= 1.
+
+---
+
+## Phase C.5: Webhook Validation (Update)
+
+### C.5.1 Reject Storage Size Reduction
+
+```bash
+oc get rediscluster redis-test -n $NAMESPACE -o jsonpath='{.spec.storage.size}' && echo " (current size)"
+
+oc patch rediscluster redis-test -n $NAMESPACE --type merge -p '{"spec":{"storage":{"size":"500Mi"}}}' 2>&1
+```
+
+**Expected**: Rejected — storage size cannot be reduced.
+
+### C.5.2 Allow Storage Size Increase
+
+```bash
+oc patch rediscluster redis-test -n $NAMESPACE --type merge -p '{"spec":{"storage":{"size":"2Gi"}}}'
+```
+
+**Expected**: Accepted.
+
+---
+
+## Phase C.6: NetworkPolicy
+
+### C.6.1 Verify NetworkPolicy Details
+
+```bash
+echo "=== NetworkPolicy ==="
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE
+
+echo ""
+echo "=== Ingress Rules ==="
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE -o jsonpath='{.spec.ingress}' | python3 -m json.tool
+
+echo ""
+echo "=== Egress Rules ==="
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE -o jsonpath='{.spec.egress}' | python3 -m json.tool
+
+echo ""
+echo "=== Owner Reference ==="
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be RedisCluster)"
+```
+
+**Expected**:
+- [ ] Ingress allows ports 6379 + 26379 from same namespace
+- [ ] Egress allows DNS (port 53 TCP/UDP)
+- [ ] Owner reference → RedisCluster
+
+### C.6.2 Verify NetworkSecured Condition
+
+```bash
+oc get rediscluster redis-test -n $NAMESPACE -o jsonpath='{.status.conditions}' | python3 -c "
+import json, sys
+conditions = json.load(sys.stdin)
+for c in conditions:
+    if c['type'] == 'NetworkSecured':
+        print(f\"NetworkSecured: {c['status']} (reason: {c['reason']})\")
+"
+```
+
+**Expected**: `NetworkSecured: True`
+
+---
+
+## Phase C.7: Idempotency
+
+### C.7.1 Re-reconcile
+
+```bash
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment -l control-plane=controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "NetworkPolicies: $(oc get networkpolicy -n $NAMESPACE 2>&1 | grep -c redis-test) (should be 1)"
+echo "Sentinel Deployments: $(oc get deployment -n $NAMESPACE 2>&1 | grep -c redis-test-sentinel) (should be 1)"
+echo "StatefulSets: $(oc get statefulset -n $NAMESPACE 2>&1 | grep -c redis-test) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each, no duplicates.
+
+---
+
+## Phase C.8: Delete CR
+
+### C.8.1 Delete and Verify All Resources Cleaned
+
+```bash
+oc delete rediscluster redis-test -n $NAMESPACE
+sleep 15
+
+oc get secret redis-test-auth -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Secret"
+oc get configmap redis-test-config -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: ConfigMap"
+oc get service redis-test-headless -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Headless"
+oc get service redis-test-client -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Client"
+oc get statefulset redis-test -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: StatefulSet"
+oc get pdb redis-test-pdb -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: PDB"
+oc get deployment redis-test-sentinel -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Sentinel Deploy"
+oc get service redis-test-sentinel -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Sentinel Svc"
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: NetworkPolicy"
+```
+
+**Expected**:
+- [ ] All 9 managed resources garbage collected
+
+---
+
+## Phase C.9: RBAC Verification
+
+### C.9.1 Verify NetworkPolicy RBAC
+
+```bash
+oc auth can-i create networkpolicies --as=system:serviceaccount:redis-operator-system:redis-operator-controller-manager -n redis-operator-system && echo "PASS" || echo "FAIL"
+oc auth can-i delete networkpolicies --as=system:serviceaccount:redis-operator-system:redis-operator-controller-manager -n redis-operator-system && echo "PASS" || echo "FAIL"
+```
+
+**Expected**: Both return "yes".
+
+---
+
+## Phase C.10: OLM Bundle Validation
+
+### C.10.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*redis-operator.v' bundle/manifests/redis-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/redis-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/redis-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `redis-operator.v0.3.0`
+- [ ] replaces: `redis-operator.v0.2.0`
+- [ ] version: `0.3.0`
+
+### C.10.2 Verify Webhook Definitions
+
+```bash
+grep 'webhookPath' bundle/manifests/redis-operator.clusterserviceversion.yaml
+```
+
+**Expected**: Mutating + validating webhook paths for rediscluster.
+
+### C.10.3 Verify NetworkPolicy RBAC in CSV
+
+```bash
+grep -A3 'networkpolicies' bundle/manifests/redis-operator.clusterserviceversion.yaml | head -5
+```
+
+**Expected**: `networking.k8s.io/networkpolicies` with CRUD verbs.
+
+### C.10.4 Bundle Validate
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario C Cleanup
+
+```bash
+oc delete rediscluster --all -n $NAMESPACE
+sleep 15
+
+# If NOT continuing to Scenario D, undeploy:
+# make undeploy                                                    # if deployed with make deploy
+# operator-sdk cleanup redis-operator --namespace $NAMESPACE       # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario C Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | cert-manager running | C.1 | Pods Running |
+| 2 | Operator deploys with v0.3.0 image | C.1 | Pod Running |
+| 3 | Webhook Service exists | C.1 | Service on port 443 |
+| 4 | Webhook configurations registered | C.1 | Mutating + Validating |
+| 5 | All A+B resources still work + NetworkPolicy | C.2 | 8 + NP created |
+| 6 | Replicas defaulted to 3 when 0 | C.3 | Webhook defaulting |
+| 7 | Version defaulted to "7.4" when empty | C.3 | Webhook defaulting |
+| 8 | sentinel.replicas defaulted to 3 | C.3 | Webhook defaulting |
+| 9 | Reject even sentinel.replicas | C.4 | Quorum validation |
+| 10 | Reject both auth.password + existingSecret | C.4 | Mutual exclusivity |
+| 11 | Reject replicas < 1 | C.4 | Validation |
+| 12 | Reject storage size reduction | C.5 | Update validation |
+| 13 | Allow storage size increase | C.5 | Accepted |
+| 14 | NetworkPolicy allows ports 6379+26379 | C.6 | Correct ingress |
+| 15 | NetworkPolicy has DNS egress | C.6 | Correct egress |
+| 16 | NetworkPolicy owner ref → RedisCluster | C.6 | Correct |
+| 17 | NetworkSecured condition True | C.6 | Condition set |
+| 18 | Idempotent — no duplicate NP | C.7 | Exactly 1 |
+| 19 | All 9 resources cleaned on delete | C.8 | Including NP |
+| 20 | NetworkPolicy RBAC works | C.9 | can-i returns yes |
+| 21 | CSV version 0.3.0 with replaces | C.10 | Correct upgrade |
+| 22 | Webhook definitions in CSV | C.10 | Both paths |
+| 23 | NP RBAC in CSV | C.10 | networking.k8s.io |
+| 24 | Bundle validates | C.10 | No errors |

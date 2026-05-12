@@ -34,6 +34,9 @@ const (
 	ConditionDegraded = "Degraded"
 
 	ConditionSentinelReady = "SentinelReady"
+
+	// ConditionNetworkSecured indicates the NetworkPolicy is configured.
+	ConditionNetworkSecured = "NetworkSecured"
 )
 
 // setCondition adds or updates a condition on the RedisCluster status.
@@ -102,4 +105,12 @@ func setSentinelReadyCondition(cr *cachev1alpha1.RedisCluster, reason, message s
 
 func clearSentinelReadyCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionSentinelReady, metav1.ConditionFalse, reason, message)
+}
+
+func setNetworkSecuredCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+	setCondition(cr, ConditionNetworkSecured, metav1.ConditionTrue, reason, message)
+}
+
+func clearNetworkSecuredCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+	setCondition(cr, ConditionNetworkSecured, metav1.ConditionFalse, reason, message)
 }

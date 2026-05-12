@@ -23,6 +23,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -57,6 +58,7 @@ type RedisClusterReconciler struct {
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -110,6 +112,10 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if err := r.reconcileClientService(ctx, cr); err != nil {
 		return r.handleError(ctx, cr, "ClientServiceReconcileFailed", err)
+	}
+
+	if err := r.reconcileNetworkPolicy(ctx, cr); err != nil {
+		return r.handleError(ctx, cr, "NetworkPolicyReconcileFailed", err)
 	}
 
 	if err := r.reconcileStatefulSet(ctx, cr); err != nil {
@@ -181,6 +187,7 @@ func (r *RedisClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
+		Owns(&networkingv1.NetworkPolicy{}).
 		Owns(&appsv1.Deployment{}).
 		Complete(r)
 }

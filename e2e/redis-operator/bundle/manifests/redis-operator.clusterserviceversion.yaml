@@ -43,7 +43,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/redis-operator
-  name: redis-operator.v0.2.0
+  name: redis-operator.v0.3.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -66,6 +66,8 @@ spec:
       - kind: PodDisruptionBudget
         version: v1
       - kind: Deployment
+        version: v1
+      - kind: NetworkPolicy
         version: v1
       specDescriptors:
       - path: replicas
@@ -116,7 +118,8 @@ spec:
     The Redis Operator manages Redis clusters on Kubernetes.
     It automates deployment, scaling, and lifecycle management of
     Redis instances using StatefulSets, Services, Secrets, ConfigMaps,
-    and PodDisruptionBudgets for high availability.
+    PodDisruptionBudgets for high availability, NetworkPolicies for
+    cluster isolation, and webhooks for admission control.
   displayName: Redis Operator
   icon:
   - base64data: ""
@@ -230,6 +233,18 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - networkpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         serviceAccountName: redis-operator-controller-manager
       deployments:
       - label:
@@ -258,7 +273,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/redis-operator:v0.2.0
+                image: quay.io/mpaulgreen/redis-operator:v0.3.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -350,5 +365,46 @@ spec:
   provider:
     name: Example
     url: https://example.com
-  replaces: redis-operator.v0.1.0
-  version: 0.2.0
+  replaces: redis-operator.v0.2.0
+  version: 0.3.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 9443
+    deploymentName: redis-operator-controller-manager
+    failurePolicy: Fail
+    generateName: mrediscluster.kb.io
+    rules:
+    - apiGroups:
+      - cache.redis.example.com
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - redisclusters
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-cache-redis-example-com-v1alpha1-rediscluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 9443
+    deploymentName: redis-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vrediscluster.kb.io
+    rules:
+    - apiGroups:
+      - cache.redis.example.com
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - redisclusters
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-cache-redis-example-com-v1alpha1-rediscluster
