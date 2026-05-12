@@ -134,6 +134,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "RedisCluster")
 		os.Exit(1)
 	}
+	if err = (&controller.RedisUserReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("redis-operator"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RedisUser")
+		os.Exit(1)
+	}
 	// Only register v1beta1 webhook — it is the storage version and a superset of v1alpha1.
 	// Registering both causes v1alpha1 webhook to strip v1beta1-only fields (tls, maxMemory)
 	// during admission, since v1alpha1 types don't have those fields.

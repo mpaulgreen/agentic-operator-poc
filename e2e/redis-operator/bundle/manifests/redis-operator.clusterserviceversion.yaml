@@ -39,16 +39,32 @@ metadata:
             },
             "maxMemory": "512Mi"
           }
+        },
+        {
+          "apiVersion": "cache.redis.example.com/v1beta1",
+          "kind": "RedisUser",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "redis-operator"
+            },
+            "name": "redisuser-sample"
+          },
+          "spec": {
+            "username": "appuser",
+            "clusterRef": "rediscluster-sample",
+            "permissions": ["+@read", "+@write", "~app:*"]
+          }
         }
       ]
     capabilities: Basic Install
     categories: Database
     certified: "false"
-    createdAt: "2026-05-11T00:00:00Z"
+    createdAt: "2026-05-12T00:00:00Z"
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/redis-operator
-  name: redis-operator.v0.4.0
+  name: redis-operator.v0.5.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -136,6 +152,39 @@ spec:
       - path: tlsEnabled
         displayName: TLS Enabled
         description: Whether TLS is currently active on the Redis cluster
+    - description: RedisUser is the Schema for the redisusers API
+      displayName: Redis User
+      kind: RedisUser
+      name: redisusers.cache.redis.example.com
+      version: v1beta1
+      resources:
+      - kind: Secret
+        version: v1
+      - kind: ConfigMap
+        version: v1
+      specDescriptors:
+      - path: username
+        displayName: Username
+        description: Redis ACL username
+      - path: permissions
+        displayName: Permissions
+        description: Redis ACL permission rules
+      - path: clusterRef
+        displayName: Cluster Reference
+        description: Name of the parent RedisCluster
+      - path: passwordSecret
+        displayName: Password Secret
+        description: Existing Secret name for the user password
+      statusDescriptors:
+      - path: phase
+        displayName: Phase
+        description: Current lifecycle phase of the RedisUser
+      - path: conditions
+        displayName: Conditions
+        description: Latest available observations of the resource state
+      - path: passwordSecretName
+        displayName: Password Secret Name
+        description: Name of the generated or referenced password Secret
   description: |
     ## Overview
     The Redis Operator manages Redis clusters on Kubernetes.
@@ -144,11 +193,11 @@ spec:
     PodDisruptionBudgets for high availability, NetworkPolicies for
     cluster isolation, and webhooks for admission control.
 
-    ## v0.4.0 — API Versioning + TLS Support
-    - Added v1beta1 API version (storage version) with TLS and MaxMemory fields
-    - v1alpha1 API remains available for backward compatibility
-    - TLS support: enable encrypted connections with manual secrets or cert-manager
-    - MaxMemory: configure Redis memory limits via the CRD
+    ## v0.5.0 — Multi-CRD: RedisUser
+    - Added RedisUser CRD for managing Redis ACL users
+    - Users are scoped to a parent RedisCluster via clusterRef
+    - Automatic password Secret generation
+    - ACL ConfigMap generation for StatefulSet mounting
   displayName: Redis Operator
   icon:
   - base64data: ""
@@ -181,6 +230,32 @@ spec:
           - cache.redis.example.com
           resources:
           - redisclusters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - cache.redis.example.com
+          resources:
+          - redisusers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cache.redis.example.com
+          resources:
+          - redisusers/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - cache.redis.example.com
+          resources:
+          - redisusers/finalizers
           verbs:
           - update
         - apiGroups:
@@ -302,7 +377,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/redis-operator:v0.4.0
+                image: quay.io/mpaulgreen/redis-operator:v0.5.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -394,8 +469,8 @@ spec:
   provider:
     name: Example
     url: https://example.com
-  replaces: redis-operator.v0.3.0
-  version: 0.4.0
+  replaces: redis-operator.v0.4.0
+  version: 0.5.0
   webhookdefinitions:
   - admissionReviewVersions:
     - v1

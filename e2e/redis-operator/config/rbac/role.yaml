@@ -98,6 +98,32 @@ rules:
   - patch
   - update
 - apiGroups:
+  - cache.redis.example.com
+  resources:
+  - redisusers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cache.redis.example.com
+  resources:
+  - redisusers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cache.redis.example.com
+  resources:
+  - redisusers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - networking.k8s.io
   resources:
   - networkpolicies

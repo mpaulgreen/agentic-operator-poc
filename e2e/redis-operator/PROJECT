@@ -16,4 +16,13 @@ resources:
   kind: RedisCluster
   path: github.com/example/redis-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: redis.example.com
+  group: cache
+  kind: RedisUser
+  path: github.com/example/redis-operator/api/v1beta1
+  version: v1beta1
 version: "3"

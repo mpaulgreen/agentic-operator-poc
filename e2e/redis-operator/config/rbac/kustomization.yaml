@@ -8,3 +8,5 @@ resources:
 - metrics_service.yaml
 - rediscluster_editor_role.yaml
 - rediscluster_viewer_role.yaml
+- cache_redisuser_editor_role.yaml
+- cache_redisuser_viewer_role.yaml

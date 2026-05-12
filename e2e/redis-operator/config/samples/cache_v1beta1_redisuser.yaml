@@ -1,0 +1,13 @@
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisUser
+metadata:
+  labels:
+    app.kubernetes.io/name: redis-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: redisuser-sample
+spec:
+  username: myuser
+  clusterRef: rediscluster-sample
+  permissions:
+    - "+@read"
+    - "~cache:*"

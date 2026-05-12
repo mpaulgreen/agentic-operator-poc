@@ -2023,3 +2023,670 @@ make undeploy                                                    # if deployed w
 | 23 | TLS descriptors in CSV | D.9 | tls.* + maxMemory |
 | 24 | No conversion webhook patch (Bug #15) | D.9 | No patch files |
 | 25 | Bundle validates | D.9 | No errors |
+
+---
+---
+
+# Scenario E: Add Second CRD — RedisUser (v0.5.0)
+
+Adds a second CRD (`RedisUser`) to the Redis operator for managing Redis ACL users. Built using:
+- **Step 1** (Generate): `scaffolding-operator` SKILL (Workflow B, Pattern B — same group) — Added RedisUser to PROJECT, stubs, RBAC roles, sample, updated main.go
+- **Step 2** (Generate): `designing-operator-api` SKILL (Workflow A) — Designed RedisUser types with markers, print columns
+- **Step 3** (Generate): `implementing-reconciliation` SKILL (Workflow A) — Implemented RedisUser controller (Secret + ConfigMap reconcilers)
+- **Step 4a** (Test): `operator-test-generator` SUBAGENT — Generated RedisUser controller tests (13 cases)
+- **Step 4b** (Review): `operator-reviewer` SUBAGENT — Reviewed all changes (0 Critical)
+- **Step 5** (Generate): `bundling-operator` SKILL (Workflow B) — Updated CSV v0.4.0 → v0.5.0, added RedisUser as second owned CRD
+- **Step 6** (Validate): `operator-bundle-validator` SUBAGENT — Validated updated bundle
+
+**Changes**: RedisUser CRD (v1beta1 only, storageversion), RedisUserReconciler creating Secret (password) + ConfigMap (ACL rules), parent RedisCluster verification via clusterRef, CSV v0.5.0 with 2 owned CRDs, 2 alm-examples.
+
+**Key feature**: Multi-CRD operator — tests scaffolding-operator Pattern B (same-group), multi-CRD bundle, and independent controller lifecycle.
+
+**Prerequisites**:
+- Scenario D completed successfully. All Scenario D CRs deleted.
+- cert-manager operator installed (from Scenario C).
+
+## Scenario E Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/redis-operator:v0.5.0
+export BUNDLE_IMG=quay.io/mpaulgreen/redis-operator-bundle:v0.5.0
+export NAMESPACE=redis-operator-system
+
+cd e2e/redis-operator
+```
+
+---
+
+## Phase E.1: Build and Deploy v0.5.0
+
+### E.1.1 Build the Operator Image
+
+```bash
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### E.1.2 Deploy the Operator
+
+#### Option A: `make deploy` (Development)
+
+```bash
+make manifests
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/redis-operator:v0.5.0|$IMG|g" bundle/manifests/redis-operator.clusterserviceversion.yaml
+
+# Refresh CRDs in bundle (both RedisCluster + RedisUser)
+make manifests
+cp config/crd/bases/cache.redis.example.com_redisclusters.yaml bundle/manifests/
+cp config/crd/bases/cache.redis.example.com_redisusers.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### E.1.3 Verify Deployment
+
+```bash
+# Operator pod running
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+
+# Both CRDs installed
+oc get crd redisclusters.cache.redis.example.com && echo "PASS: RedisCluster CRD"
+oc get crd redisusers.cache.redis.example.com && echo "PASS: RedisUser CRD"
+
+# RedisUser CRD has expected fields
+oc get crd redisusers.cache.redis.example.com -o jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+
+# RedisUser print columns
+oc get crd redisusers.cache.redis.example.com -o jsonpath='{.spec.versions[0].additionalPrinterColumns[*].name}' && echo ""
+
+# Controller logs — should show EventSources for both controllers
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=30 | grep -E "Starting EventSource|Starting workers"
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.5.0 image
+- [ ] Both CRDs installed: `redisclusters` and `redisusers`
+- [ ] RedisUser CRD fields: clusterRef, passwordSecret, permissions, username
+- [ ] Print columns: Phase, Username, Cluster, Age
+- [ ] Two controllers starting (RedisCluster + RedisUser EventSources)
+
+---
+
+## Phase E.2: Existing Features Regression (RedisCluster)
+
+### E.2.1 Create RedisCluster (Parent)
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisCluster
+metadata:
+  name: redis-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.4"
+  storage:
+    size: 1Gi
+  sentinel:
+    enabled: true
+    replicas: 3
+EOF
+
+sleep 30
+```
+
+### E.2.2 Verify All A+B+C+D Resources Created
+
+```bash
+echo "=== RedisCluster Resources ==="
+oc get secret redis-test-auth -n $NAMESPACE && echo "PASS: Secret" || echo "FAIL"
+oc get configmap redis-test-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+oc get service redis-test-headless -n $NAMESPACE && echo "PASS: Headless" || echo "FAIL"
+oc get service redis-test-client -n $NAMESPACE && echo "PASS: Client" || echo "FAIL"
+oc get statefulset redis-test -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL"
+oc get pdb redis-test-pdb -n $NAMESPACE && echo "PASS: PDB" || echo "FAIL"
+oc get deployment redis-test-sentinel -n $NAMESPACE && echo "PASS: Sentinel" || echo "FAIL"
+oc get service redis-test-sentinel -n $NAMESPACE && echo "PASS: Sentinel Svc" || echo "FAIL"
+oc get networkpolicy redis-test-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy" || echo "FAIL"
+
+echo ""
+echo "=== Status ==="
+oc get rediscluster redis-test -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All 9 RedisCluster resources created
+- [ ] Status shows Running
+
+---
+
+## Phase E.3: Create RedisUser
+
+### E.3.1 Create RedisUser with Generated Password
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisUser
+metadata:
+  name: appuser
+  namespace: $NAMESPACE
+spec:
+  username: appuser
+  clusterRef: redis-test
+  permissions:
+    - "+@read"
+    - "+@write"
+    - "~app:*"
+EOF
+
+sleep 15
+```
+
+### E.3.2 Verify RedisUser Managed Resources
+
+```bash
+echo "=== RedisUser Resources ==="
+oc get secret appuser-user-secret -n $NAMESPACE && echo "PASS: User Secret" || echo "FAIL"
+oc get configmap appuser-acl -n $NAMESPACE && echo "PASS: ACL ConfigMap" || echo "FAIL"
+
+echo ""
+echo "=== Owner References ==="
+oc get secret appuser-user-secret -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be RedisUser)"
+oc get configmap appuser-acl -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be RedisUser)"
+```
+
+**Expected**:
+- [ ] Secret `appuser-user-secret` created with `REDIS_USER_PASSWORD` key
+- [ ] ConfigMap `appuser-acl` created with `users.acl` key
+- [ ] Both have ownerReferences pointing to RedisUser
+
+### E.3.3 Verify Secret Content
+
+```bash
+oc get secret appuser-user-secret -n $NAMESPACE -o jsonpath='{.data.REDIS_USER_PASSWORD}' | base64 -d && echo ""
+```
+
+**Expected**: Random 24-character password generated.
+
+### E.3.4 Verify ACL ConfigMap Content
+
+```bash
+oc get configmap appuser-acl -n $NAMESPACE -o jsonpath='{.data.users\.acl}'
+```
+
+**Expected**: Contains `user appuser on +@read +@write ~app:*`
+
+### E.3.5 Verify RedisUser Status
+
+```bash
+oc get redisuser appuser -n $NAMESPACE -o wide
+
+echo ""
+oc get redisuser appuser -n $NAMESPACE -o jsonpath='{.status}' | python3 -m json.tool
+```
+
+**Expected**:
+- [ ] Phase: Active
+- [ ] Print columns: Phase=Active, Username=appuser, Cluster=redis-test
+- [ ] passwordSecretName: `appuser-user-secret`
+- [ ] Condition Available: True
+
+### E.3.6 Verify Finalizer
+
+```bash
+oc get redisuser appuser -n $NAMESPACE -o jsonpath='{.metadata.finalizers}' && echo ""
+```
+
+**Expected**: `["cache.redis.example.com/redisuser-finalizer"]`
+
+### E.3.7 Verify Events
+
+```bash
+oc get events -n $NAMESPACE --field-selector involvedObject.name=appuser --sort-by='.lastTimestamp'
+```
+
+**Expected**: Events for SecretCreated, ACLConfigMapCreated.
+
+---
+
+## Phase E.4: RedisUser with Existing Secret
+
+### E.4.1 Create RedisUser Referencing Existing Secret
+
+```bash
+# Create the secret first
+oc create secret generic my-redis-password -n $NAMESPACE --from-literal=password=mysecretpass123
+
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisUser
+metadata:
+  name: readonlyuser
+  namespace: $NAMESPACE
+spec:
+  username: readonly
+  clusterRef: redis-test
+  permissions:
+    - "+@read"
+    - "~*"
+  passwordSecret: my-redis-password
+EOF
+
+sleep 15
+```
+
+### E.4.2 Verify No Generated Secret
+
+```bash
+oc get secret readonlyuser-user-secret -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: No generated Secret (using existing)" || echo "FAIL: Generated Secret exists"
+
+echo ""
+echo "=== Status passwordSecretName ==="
+oc get redisuser readonlyuser -n $NAMESPACE -o jsonpath='{.status.passwordSecretName}' && echo " (should be my-redis-password)"
+```
+
+**Expected**:
+- [ ] No `readonlyuser-user-secret` created (using existing Secret)
+- [ ] `passwordSecretName` in status = `my-redis-password`
+
+### E.4.3 Verify ACL ConfigMap Created
+
+```bash
+oc get configmap readonlyuser-acl -n $NAMESPACE && echo "PASS: ACL ConfigMap"
+oc get configmap readonlyuser-acl -n $NAMESPACE -o jsonpath='{.data.users\.acl}'
+```
+
+**Expected**: ConfigMap with `user readonly on +@read ~*`
+
+---
+
+## Phase E.5: Parent Cluster Validation
+
+### E.5.1 Create RedisUser with Non-Existent ClusterRef
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisUser
+metadata:
+  name: orphan-user
+  namespace: $NAMESPACE
+spec:
+  username: orphan
+  clusterRef: nonexistent-cluster
+EOF
+
+sleep 15
+```
+
+### E.5.2 Verify Failed Status
+
+```bash
+oc get redisuser orphan-user -n $NAMESPACE -o wide
+oc get redisuser orphan-user -n $NAMESPACE -o jsonpath='{.status.phase}' && echo " (should be Failed)"
+
+echo ""
+echo "=== Events ==="
+oc get events -n $NAMESPACE --field-selector involvedObject.name=orphan-user --sort-by='.lastTimestamp' | tail -5
+```
+
+**Expected**:
+- [ ] Phase: Failed
+- [ ] Warning event: ClusterNotFound
+- [ ] Degraded condition: True
+
+### E.5.3 Cleanup Orphan User
+
+```bash
+oc delete redisuser orphan-user -n $NAMESPACE
+sleep 5
+```
+
+---
+
+## Phase E.6: Validation Markers
+
+### E.6.1 Reject Empty Username
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisUser
+metadata:
+  name: bad-user
+  namespace: $NAMESPACE
+spec:
+  username: ""
+  clusterRef: redis-test
+EOF
+```
+
+**Expected**: Rejected — username MinLength=1.
+
+### E.6.2 Reject Invalid Username Pattern
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisUser
+metadata:
+  name: bad-user
+  namespace: $NAMESPACE
+spec:
+  username: "123invalid"
+  clusterRef: redis-test
+EOF
+```
+
+**Expected**: Rejected — username must match `^[a-zA-Z][a-zA-Z0-9_-]*$`.
+
+### E.6.3 Reject Empty ClusterRef
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisUser
+metadata:
+  name: bad-user
+  namespace: $NAMESPACE
+spec:
+  username: validuser
+  clusterRef: ""
+EOF
+```
+
+**Expected**: Rejected — clusterRef MinLength=1.
+
+---
+
+## Phase E.7: ACL Update (Check-Update)
+
+### E.7.1 Update Permissions
+
+```bash
+oc patch redisuser appuser -n $NAMESPACE --type merge -p '{"spec":{"permissions":["+@read","~cache:*"]}}'
+sleep 10
+
+oc get configmap appuser-acl -n $NAMESPACE -o jsonpath='{.data.users\.acl}'
+```
+
+**Expected**: ConfigMap updated to `user appuser on +@read ~cache:*`
+
+---
+
+## Phase E.8: Idempotency
+
+### E.8.1 Re-reconcile
+
+```bash
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment -l control-plane=controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "User Secrets: $(oc get secret -n $NAMESPACE 2>&1 | grep -c appuser-user-secret) (should be 1)"
+echo "ACL ConfigMaps: $(oc get configmap -n $NAMESPACE 2>&1 | grep -c appuser-acl) (should be 1)"
+echo "RedisUsers: $(oc get redisuser -n $NAMESPACE 2>&1 | grep -c appuser) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each, no duplicates.
+
+### E.8.2 Password Unchanged After Reconciliation
+
+```bash
+PASS_BEFORE=$(oc get secret appuser-user-secret -n $NAMESPACE -o jsonpath='{.data.REDIS_USER_PASSWORD}')
+
+oc label redisuser appuser -n $NAMESPACE test-reconcile=true
+sleep 10
+
+PASS_AFTER=$(oc get secret appuser-user-secret -n $NAMESPACE -o jsonpath='{.data.REDIS_USER_PASSWORD}')
+[ "$PASS_BEFORE" = "$PASS_AFTER" ] && echo "PASS: Password unchanged (idempotent)" || echo "FAIL: Password changed!"
+```
+
+---
+
+## Phase E.9: Multi-Instance RedisUser
+
+### E.9.1 Create Multiple Users for Same Cluster
+
+```bash
+for user in reader writer admin; do
+cat <<EOF | oc apply -f -
+apiVersion: cache.redis.example.com/v1beta1
+kind: RedisUser
+metadata:
+  name: redis-$user
+  namespace: $NAMESPACE
+spec:
+  username: $user
+  clusterRef: redis-test
+  permissions:
+    - "+@read"
+EOF
+done
+
+sleep 15
+oc get redisuser -n $NAMESPACE
+```
+
+**Expected**:
+- [ ] 3 additional RedisUsers created (reader, writer, admin)
+- [ ] Each has its own Secret + ConfigMap
+- [ ] No cross-contamination
+
+### E.9.2 Delete One User, Others Unaffected
+
+```bash
+oc delete redisuser redis-writer -n $NAMESPACE
+sleep 10
+
+oc get redisuser -n $NAMESPACE
+oc get secret -n $NAMESPACE | grep user-secret
+oc get configmap -n $NAMESPACE | grep acl
+```
+
+**Expected**: redis-reader and redis-admin still Active, redis-writer fully cleaned up.
+
+### E.9.3 Cleanup Multi-Instance Users
+
+```bash
+oc delete redisuser redis-reader redis-admin -n $NAMESPACE
+sleep 10
+```
+
+---
+
+## Phase E.10: Delete RedisUser — Resource Cleanup
+
+### E.10.1 Delete RedisUser and Verify Resources Cleaned
+
+```bash
+oc delete redisuser appuser readonlyuser -n $NAMESPACE
+sleep 15
+
+oc get secret appuser-user-secret -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: User Secret"
+oc get configmap appuser-acl -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: ACL ConfigMap"
+oc get configmap readonlyuser-acl -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: ReadOnly ACL"
+```
+
+**Expected**:
+- [ ] All RedisUser managed resources garbage collected (Secrets + ConfigMaps)
+
+---
+
+## Phase E.11: Delete RedisCluster — Verify Independence
+
+### E.11.1 Delete Parent RedisCluster
+
+```bash
+oc delete rediscluster redis-test -n $NAMESPACE
+sleep 15
+
+oc get secret redis-test-auth -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Cluster Secret cleaned"
+oc get statefulset redis-test -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: StatefulSet cleaned"
+oc get rediscluster -n $NAMESPACE
+```
+
+**Expected**:
+- [ ] All 9 RedisCluster resources cleaned
+- [ ] RedisUser resources already cleaned (from E.10)
+
+---
+
+## Phase E.12: RBAC Verification
+
+### E.12.1 Verify RedisUser RBAC
+
+```bash
+oc auth can-i create redisusers --as=system:serviceaccount:redis-operator-system:redis-operator-controller-manager -n redis-operator-system && echo "PASS: Create RedisUsers" || echo "FAIL"
+oc auth can-i get redisusers/status --as=system:serviceaccount:redis-operator-system:redis-operator-controller-manager -n redis-operator-system && echo "PASS: Get RedisUser status" || echo "FAIL"
+oc auth can-i update redisusers/finalizers --as=system:serviceaccount:redis-operator-system:redis-operator-controller-manager -n redis-operator-system && echo "PASS: Update finalizers" || echo "FAIL"
+```
+
+**Expected**: All return "yes".
+
+---
+
+## Phase E.13: OLM Bundle Validation
+
+### E.13.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*redis-operator.v' bundle/manifests/redis-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/redis-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/redis-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `redis-operator.v0.5.0`
+- [ ] replaces: `redis-operator.v0.4.0`
+- [ ] version: `0.5.0`
+
+### E.13.2 Verify Two Owned CRDs
+
+```bash
+grep 'kind:.*Redis' bundle/manifests/redis-operator.clusterserviceversion.yaml | head -5
+```
+
+**Expected**: Both `RedisCluster` and `RedisUser` listed as owned CRDs.
+
+### E.13.3 Verify Two CRD Manifests in Bundle
+
+```bash
+ls bundle/manifests/cache.redis.example.com_redis*.yaml
+```
+
+**Expected**: Two CRD files — `_redisclusters.yaml` and `_redisusers.yaml`.
+
+### E.13.4 Verify RedisUser Descriptors
+
+```bash
+grep -E 'username|permissions|clusterRef|passwordSecret|passwordSecretName' bundle/manifests/redis-operator.clusterserviceversion.yaml | grep 'path:' | head -10
+```
+
+**Expected**: specDescriptors for username, permissions, clusterRef, passwordSecret; statusDescriptors for passwordSecretName.
+
+### E.13.5 Verify RedisUser RBAC in CSV
+
+```bash
+grep -A5 'redisusers' bundle/manifests/redis-operator.clusterserviceversion.yaml | head -10
+```
+
+**Expected**: `cache.redis.example.com/redisusers` with CRUD verbs, plus status and finalizer subresources.
+
+### E.13.6 Verify Two alm-examples
+
+```bash
+python3 -c "
+import yaml, json
+with open('bundle/manifests/redis-operator.clusterserviceversion.yaml') as f:
+    csv = yaml.safe_load(f)
+examples = json.loads(csv['metadata']['annotations']['alm-examples'])
+for ex in examples:
+    print(f\"{ex['kind']}: {ex['metadata']['name']}\")
+print(f'Total: {len(examples)} examples')
+"
+```
+
+**Expected**: 2 examples — RedisCluster + RedisUser.
+
+### E.13.7 Bundle Validate
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario E Cleanup
+
+```bash
+oc delete redisuser --all -n $NAMESPACE 2>/dev/null
+oc delete rediscluster --all -n $NAMESPACE 2>/dev/null
+sleep 15
+
+# Undeploy the operator:
+make undeploy                                                    # if deployed with make deploy
+# operator-sdk cleanup redis-operator --namespace $NAMESPACE       # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario E Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | Operator deploys with v0.5.0 image | E.1 | Pod Running |
+| 2 | Both CRDs installed (RedisCluster + RedisUser) | E.1 | 2 CRDs |
+| 3 | RedisUser CRD has expected fields | E.1 | username, permissions, clusterRef, passwordSecret |
+| 4 | RedisUser print columns display | E.1 | Phase, Username, Cluster, Age |
+| 5 | Two controllers starting | E.1 | Both EventSource sets |
+| 6 | RedisCluster regression — all 9 resources | E.2 | All created, Running |
+| 7 | RedisUser creates Secret with generated password | E.3 | REDIS_USER_PASSWORD, 24 chars |
+| 8 | RedisUser creates ACL ConfigMap | E.3 | users.acl with permissions |
+| 9 | Both resources have ownerRef → RedisUser | E.3 | Correct |
+| 10 | RedisUser status: Active, Available=True | E.3 | Phase + condition |
+| 11 | RedisUser has correct finalizer | E.3 | redisuser-finalizer |
+| 12 | Events recorded (SecretCreated, ACLConfigMapCreated) | E.3 | 2 events |
+| 13 | Existing passwordSecret skips Secret creation | E.4 | No generated Secret |
+| 14 | passwordSecretName reflects existing Secret | E.4 | my-redis-password |
+| 15 | ACL ConfigMap still created with existing Secret | E.4 | users.acl present |
+| 16 | Non-existent clusterRef → Failed phase | E.5 | ClusterNotFound |
+| 17 | Reject empty username | E.6 | Validation error |
+| 18 | Reject invalid username pattern | E.6 | Validation error |
+| 19 | Reject empty clusterRef | E.6 | Validation error |
+| 20 | ACL ConfigMap updated on permission change | E.7 | Check-update works |
+| 21 | Idempotent — no duplicate resources | E.8 | Exactly 1 each |
+| 22 | Password unchanged on re-reconcile | E.8 | Same base64 value |
+| 23 | Multiple users per cluster independent | E.9 | No cross-contamination |
+| 24 | Deleting one user doesn't affect others | E.9 | Others still Active |
+| 25 | RedisUser deletion cleans Secret + ConfigMap | E.10 | All GC'd |
+| 26 | RedisCluster deletion independent of RedisUser | E.11 | Cluster resources cleaned |
+| 27 | RedisUser RBAC works | E.12 | can-i returns yes |
+| 28 | CSV version 0.5.0 with replaces | E.13 | Correct upgrade path |
+| 29 | Two owned CRDs in CSV | E.13 | RedisCluster + RedisUser |
+| 30 | Two CRD manifests in bundle | E.13 | Both YAML files |
+| 31 | RedisUser descriptors in CSV | E.13 | spec + status descriptors |
+| 32 | RedisUser RBAC in CSV | E.13 | redisusers rules |
+| 33 | Two alm-examples | E.13 | RedisCluster + RedisUser |
+| 34 | Bundle validates | E.13 | No errors |

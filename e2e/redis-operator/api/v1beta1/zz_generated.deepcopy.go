@@ -135,5 +135,66 @@ func (in *StorageSpec) DeepCopy() *StorageSpec {
 	out := new(StorageSpec); in.DeepCopyInto(out); return out
 }
 
+func (in *RedisUser) DeepCopyInto(out *RedisUser) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	in.Spec.DeepCopyInto(&out.Spec)
+	in.Status.DeepCopyInto(&out.Status)
+}
+func (in *RedisUser) DeepCopy() *RedisUser {
+	if in == nil { return nil }
+	out := new(RedisUser); in.DeepCopyInto(out); return out
+}
+func (in *RedisUser) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil { return c }
+	return nil
+}
+
+func (in *RedisUserList) DeepCopyInto(out *RedisUserList) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	if in.Items != nil {
+		in, out := &in.Items, &out.Items
+		*out = make([]RedisUser, len(*in))
+		for i := range *in { (*in)[i].DeepCopyInto(&(*out)[i]) }
+	}
+}
+func (in *RedisUserList) DeepCopy() *RedisUserList {
+	if in == nil { return nil }
+	out := new(RedisUserList); in.DeepCopyInto(out); return out
+}
+func (in *RedisUserList) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil { return c }
+	return nil
+}
+
+func (in *RedisUserSpec) DeepCopyInto(out *RedisUserSpec) {
+	*out = *in
+	if in.Permissions != nil {
+		in, out := &in.Permissions, &out.Permissions
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+}
+func (in *RedisUserSpec) DeepCopy() *RedisUserSpec {
+	if in == nil { return nil }
+	out := new(RedisUserSpec); in.DeepCopyInto(out); return out
+}
+
+func (in *RedisUserStatus) DeepCopyInto(out *RedisUserStatus) {
+	*out = *in
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]metav1.Condition, len(*in))
+		for i := range *in { (*in)[i].DeepCopyInto(&(*out)[i]) }
+	}
+}
+func (in *RedisUserStatus) DeepCopy() *RedisUserStatus {
+	if in == nil { return nil }
+	out := new(RedisUserStatus); in.DeepCopyInto(out); return out
+}
+
 // Ensure resource package is used
 var _ = resource.Quantity{}
