@@ -313,7 +313,7 @@ Operator projects are complex and diverse. E2E validation is organized by operat
 
 | Category | Examples | Patterns Tested | Status |
 |----------|---------|-----------------|--------|
-| **Stateful Workloads** | PostgreSQL, Redis, Kafka, MongoDB, Elasticsearch | StatefulSet, PVC, backup CronJob, connection pooling, HA (PDB/anti-affinity) | **PostgreSQL DONE** (111/111 tests) |
+| **Stateful Workloads** | PostgreSQL, Redis, Kafka, MongoDB, Elasticsearch | StatefulSet, PVC, backup CronJob, connection pooling, HA (PDB/anti-affinity) | **PostgreSQL DONE** (111/111), **Redis A DONE** (34/34, 0 skill fixes) |
 | **Application Platform** | RHOAI, Tekton, ArgoCD, ServiceMesh | Deployment, multi-component, cross-namespace | Planned |
 | **Infrastructure / Cloud** | Cluster autoscaler, node management | Cluster-scoped CRDs, node selectors, taints | Planned |
 | **Network / Security** | cert-manager, Kuadrant, External DNS | Webhooks, NetworkPolicy, TLS certificates, ingress | Partial (tested within PostgreSQL C) |
@@ -345,8 +345,9 @@ Progressive enhancement across 4 scenarios testing all 4 designing-operator-api 
 Different stateful workload to validate skill generality. Tests 5 scenarios (A-E) covering all 4 skill workflows plus the multi-CRD expansion workflow (scaffolding Workflow B). Tests different operand patterns (2 Services, Sentinel Deployment, TLS support, RedisUser second CRD). Designed as a regression test for all 17 PostgreSQL bug fixes plus the multi-CRD gap — success criteria is zero new skill modifications.
 
 - **Prompts**: [`e2e/docs/statefulsets/redis-prompts.md`](../e2e/docs/statefulsets/redis-prompts.md)
-- **Validation guide**: `e2e/docs/statefulsets/redis-e2e-validation.md` (to be created)
-- **Operator code**: `e2e/redis-operator/` (to be generated)
+- **Validation guide**: [`e2e/docs/statefulsets/redis-e2e-validation.md`](../e2e/docs/statefulsets/redis-e2e-validation.md)
+- **Operator code**: `e2e/redis-operator/`
+- **Results**: Scenario A complete — 34/34 test conditions pass on OpenShift (both deploy paths), zero skill modifications needed. Scenarios B-E pending.
 
 #### Kafka Operator (Planned)
 
@@ -396,4 +397,4 @@ Multi-component stateful workload (ZooKeeper + Kafka brokers + topic management)
 | 8 | operator-bundle-validator | 8.1, 8.2 | I-8 | A, B, C, D |
 | Final | All components | — | — | A, B, C, D |
 
-**Total**: 16 unit tests + 7 integration tests + 4 E2E scenarios (111 OpenShift test conditions) = **134 test points**
+**Total**: 16 unit tests + 7 integration tests + E2E scenarios (PostgreSQL 111 + Redis 34 = 145 OpenShift test conditions) = **168 test points**
