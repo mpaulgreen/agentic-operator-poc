@@ -1,0 +1,44 @@
+# redis-operator
+
+A Kubernetes operator for managing RedisCluster resources.
+
+## Description
+
+This operator manages the lifecycle of RedisCluster custom resources on Kubernetes and OpenShift clusters.
+
+## Getting Started
+
+### Prerequisites
+- go version v1.22+
+- docker/podman
+- kubectl v1.29+
+- Access to a Kubernetes v1.29+ cluster
+
+### Running on the cluster
+
+1. Install the CRDs:
+```sh
+make install
+```
+
+2. Build and push the image:
+```sh
+make docker-build docker-push IMG=<registry>/redis-operator:tag
+```
+
+3. Deploy the operator:
+```sh
+make deploy IMG=<registry>/redis-operator:tag
+```
+
+### Uninstall
+
+```sh
+make undeploy
+```
+
+## License
+
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0.

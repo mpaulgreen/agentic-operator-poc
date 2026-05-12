@@ -340,9 +340,13 @@ Progressive enhancement across 4 scenarios testing all 4 designing-operator-api 
 | C | Webhooks + NetworkPolicy | v0.3.0 | 27 | 4 skills (Workflow C) + 3 subagents |
 | D | API versioning + Connection Pooling | v0.4.0 | 28 | 4 skills (Workflow D) + 3 subagents |
 
-#### Redis Operator (Planned)
+#### Redis Operator (Ready)
 
-Different stateful workload to validate skill generality beyond PostgreSQL.
+Different stateful workload to validate skill generality. Tests 5 scenarios (A-E) covering all 4 skill workflows plus the multi-CRD expansion workflow (scaffolding Workflow B). Tests different operand patterns (2 Services, Sentinel Deployment, TLS support, RedisUser second CRD). Designed as a regression test for all 17 PostgreSQL bug fixes plus the multi-CRD gap — success criteria is zero new skill modifications.
+
+- **Prompts**: [`e2e/docs/statefulsets/redis-prompts.md`](../e2e/docs/statefulsets/redis-prompts.md)
+- **Validation guide**: `e2e/docs/statefulsets/redis-e2e-validation.md` (to be created)
+- **Operator code**: `e2e/redis-operator/` (to be generated)
 
 #### Kafka Operator (Planned)
 

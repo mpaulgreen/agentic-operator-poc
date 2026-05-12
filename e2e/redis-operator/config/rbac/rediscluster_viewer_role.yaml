@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: redis-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: rediscluster-viewer-role
+rules:
+- apiGroups:
+  - cache.redis.example.com
+  resources:
+  - redisclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cache.redis.example.com
+  resources:
+  - redisclusters/status
+  verbs:
+  - get

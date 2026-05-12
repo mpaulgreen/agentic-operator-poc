@@ -1,0 +1,10 @@
+resources:
+- bases/cache.redis.example.com_redisclusters.yaml
+#+kubebuilder:scaffold:crdkustomizeresource
+
+#+kubebuilder:scaffold:crdkustomizewebhookpatch
+
+#+kubebuilder:scaffold:crdkustomizecainjectionpatch
+
+configurations:
+- kustomizeconfig.yaml

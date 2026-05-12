@@ -1,0 +1,24 @@
+namespace: redis-operator-system
+
+namePrefix: redis-operator-
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+
+# [PROMETHEUS] To enable prometheus monitor, uncomment the following:
+# - ../prometheus
+
+# [WEBHOOK] Uncomment the following to enable webhooks:
+# - ../webhook
+
+# [CERTMANAGER] Uncomment the following to enable cert-manager:
+# - ../certmanager
+
+patches:
+- path: manager_config_patch.yaml
+
+# [WEBHOOK] Uncomment the following to enable webhook patches:
+# - path: manager_webhook_patch.yaml
+# - path: webhookcainjection_patch.yaml
