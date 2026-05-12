@@ -745,6 +745,88 @@ var _ = Describe("RedisCluster Controller", func() {
 	})
 
 	// ============================================================
+	// Sentinel Tests
+	// ============================================================
+	Context("When reconciling Sentinel", func() {
+		var (
+			ctx        context.Context
+			cr         *cachev1alpha1.RedisCluster
+			reconciler *RedisClusterReconciler
+			name       string
+			namespace  string
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			namespace = fmt.Sprintf("test-sentinel-%d", time.Now().UnixNano())
+			name = "redis-sentinel-test"
+
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			cr = &cachev1alpha1.RedisCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+				Spec: cachev1alpha1.RedisClusterSpec{
+					Replicas: 3, Version: "7.4",
+					Storage: cachev1alpha1.StorageSpec{Size: "1Gi"},
+					Sentinel: &cachev1alpha1.SentinelSpec{
+						Enabled:  true,
+						Replicas: 3,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cr)).To(Succeed())
+
+			reconciler = &RedisClusterReconciler{
+				Client: k8sClient, Scheme: k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+		})
+
+		AfterEach(func() {
+			_ = k8sClient.Delete(ctx, cr)
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			_ = k8sClient.Delete(ctx, ns)
+		})
+
+		It("should create Sentinel Deployment and Service when enabled", func() {
+			Expect(reconciler.reconcileSentinel(ctx, cr)).To(Succeed())
+
+			deploy := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-sentinel", name), Namespace: namespace}, deploy)).To(Succeed())
+			Expect(*deploy.Spec.Replicas).To(Equal(int32(3)))
+			Expect(deploy.OwnerReferences).To(HaveLen(1))
+
+			svc := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-sentinel", name), Namespace: namespace}, svc)).To(Succeed())
+			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(26379)))
+		})
+
+		It("should not create Sentinel when disabled", func() {
+			cr.Spec.Sentinel = nil
+			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
+			Expect(reconciler.reconcileSentinel(ctx, cr)).To(Succeed())
+
+			deploy := &appsv1.Deployment{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-sentinel", name), Namespace: namespace}, deploy)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should not recreate existing Sentinel (idempotent)", func() {
+			Expect(reconciler.reconcileSentinel(ctx, cr)).To(Succeed())
+
+			deploy := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-sentinel", name), Namespace: namespace}, deploy)).To(Succeed())
+			originalVersion := deploy.ResourceVersion
+
+			Expect(reconciler.reconcileSentinel(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-sentinel", name), Namespace: namespace}, deploy)).To(Succeed())
+			Expect(deploy.ResourceVersion).To(Equal(originalVersion))
+		})
+	})
+
+	// ============================================================
 	// Helper Function Tests
 	// ============================================================
 	Context("When testing helper functions", func() {

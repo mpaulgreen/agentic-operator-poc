@@ -213,7 +213,7 @@ All 8 sprints complete. 5 skills (99 files) + 3 subagents built and validated.
 - 5 skills: scaffolding-operator (29), designing-operator-api (24), implementing-reconciliation (19), testing-operator (12), bundling-operator (15) = **99 skill files**
 - 3 subagents: operator-reviewer, operator-test-generator, operator-bundle-validator
 - **PostgreSQL Operator** (4 scenarios A-D): **DONE** — 111/111 test conditions pass on OpenShift (both deploy paths)
-- **Redis Operator** (Scenario A): **DONE** — 34/34 test conditions pass on OpenShift (both deploy paths, zero skill modifications)
+- **Redis Operator** (Scenarios A-B): **DONE** — 56/56 test conditions pass on OpenShift (both deploy paths, zero skill modifications)
 - 17 skill bugs traced and fixed (all from PostgreSQL); Redis required zero additional fixes — **skills validated as general-purpose**
-- **145 total E2E test conditions across 2 operators — ALL PASS**
-- Next: Redis Scenarios B-E (Sentinel, Webhooks, API versioning, Multi-CRD)
+- **167 total E2E test conditions across 2 operators — ALL PASS**
+- Next: Redis Scenarios C-E (Webhooks, API versioning, Multi-CRD)

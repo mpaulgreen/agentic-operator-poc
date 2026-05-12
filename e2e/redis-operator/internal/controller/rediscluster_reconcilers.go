@@ -508,3 +508,122 @@ func podAffinityForRedisCluster(cr *cachev1alpha1.RedisCluster) *corev1.Affinity
 		},
 	}
 }
+
+// reconcileSentinel ensures the Sentinel Deployment + Service exist when sentinel is enabled.
+func (r *RedisClusterReconciler) reconcileSentinel(ctx context.Context, cr *cachev1alpha1.RedisCluster) error {
+	deployName := fmt.Sprintf("%s-sentinel", cr.Name)
+	svcName := fmt.Sprintf("%s-sentinel", cr.Name)
+
+	if cr.Spec.Sentinel == nil || !cr.Spec.Sentinel.Enabled {
+		existingDeploy := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: cr.Namespace}, existingDeploy); err == nil {
+			if err := r.Delete(ctx, existingDeploy); err != nil {
+				return err
+			}
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "SentinelDeploymentDeleted", deployName)
+		}
+		existingSvc := &corev1.Service{}
+		if err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: cr.Namespace}, existingSvc); err == nil {
+			if err := r.Delete(ctx, existingSvc); err != nil {
+				return err
+			}
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "SentinelServiceDeleted", svcName)
+		}
+		clearSentinelReadyCondition(cr, "SentinelDisabled", "Sentinel is not enabled")
+		cr.Status.SentinelEndpoint = ""
+		return nil
+	}
+
+	// --- Reconcile Deployment ---
+	existingDeploy := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: cr.Namespace}, existingDeploy)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if errors.IsNotFound(err) {
+		sentinelLabels := map[string]string{
+			"app.kubernetes.io/instance":  cr.Name,
+			"app.kubernetes.io/component": "sentinel",
+			"app.kubernetes.io/managed-by": "redis-operator",
+		}
+		replicas := cr.Spec.Sentinel.Replicas
+		image := "registry.access.redhat.com/ubi9/ubi-micro:latest"
+
+		deploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      deployName,
+				Namespace: cr.Namespace,
+				Labels:    sentinelLabels,
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: sentinelLabels},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: sentinelLabels},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:    "sentinel",
+								Image:   image,
+								Command: []string{"/bin/sleep", "infinity"},
+								Ports: []corev1.ContainerPort{
+									{Name: "sentinel", ContainerPort: 26379, Protocol: corev1.ProtocolTCP},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if err := controllerutil.SetControllerReference(cr, deploy, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, deploy); err != nil {
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "SentinelDeploymentFailed", err.Error())
+			return err
+		}
+		r.Recorder.Event(cr, corev1.EventTypeNormal, "SentinelDeploymentCreated", deployName)
+	}
+
+	// --- Reconcile Service ---
+	existingSvc := &corev1.Service{}
+	err = r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: cr.Namespace}, existingSvc)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if errors.IsNotFound(err) {
+		sentinelLabels := map[string]string{
+			"app.kubernetes.io/instance":  cr.Name,
+			"app.kubernetes.io/component": "sentinel",
+			"app.kubernetes.io/managed-by": "redis-operator",
+		}
+		svc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      svcName,
+				Namespace: cr.Namespace,
+				Labels:    sentinelLabels,
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: sentinelLabels,
+				Ports: []corev1.ServicePort{
+					{Name: "sentinel", Port: 26379, Protocol: corev1.ProtocolTCP},
+				},
+			},
+		}
+
+		if err := controllerutil.SetControllerReference(cr, svc, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, svc); err != nil {
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "SentinelServiceFailed", err.Error())
+			return err
+		}
+		r.Recorder.Event(cr, corev1.EventTypeNormal, "SentinelServiceCreated", svcName)
+	}
+
+	setSentinelReadyCondition(cr, "SentinelReady",
+		fmt.Sprintf("Sentinel is configured at %s-sentinel.%s.svc.cluster.local:26379", cr.Name, cr.Namespace))
+	cr.Status.SentinelEndpoint = fmt.Sprintf("%s-sentinel.%s.svc.cluster.local:26379", cr.Name, cr.Namespace)
+	return nil
+}

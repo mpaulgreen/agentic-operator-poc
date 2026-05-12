@@ -44,6 +44,10 @@ type RedisClusterSpec struct {
 	// Auth defines the optional authentication configuration.
 	// +optional
 	Auth *AuthSpec `json:"auth,omitempty"`
+
+	// Sentinel defines the optional Redis Sentinel HA configuration.
+	// +optional
+	Sentinel *SentinelSpec `json:"sentinel,omitempty"`
 }
 
 // StorageSpec defines storage configuration for Redis data.
@@ -69,6 +73,23 @@ type AuthSpec struct {
 	ExistingSecret string `json:"existingSecret,omitempty"`
 }
 
+// SentinelSpec defines Redis Sentinel HA configuration.
+type SentinelSpec struct {
+	// Enabled indicates whether Sentinel HA is active.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Replicas is the number of Sentinel instances (should be odd for quorum).
+	// +kubebuilder:validation:Minimum=3
+	// +kubebuilder:validation:Maximum=7
+	// +kubebuilder:default=3
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// Image is the container image for Sentinel (optional, defaults to the Redis image).
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
 // RedisClusterStatus defines the observed state of RedisCluster.
 type RedisClusterStatus struct {
 	// Phase represents the current lifecycle phase of the RedisCluster.
@@ -87,6 +108,9 @@ type RedisClusterStatus struct {
 	// Conditions represent the latest available observations of the resource's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+
+	// SentinelEndpoint is the Sentinel service connection endpoint.
+	SentinelEndpoint string `json:"sentinelEndpoint,omitempty"`
 }
 
 // +kubebuilder:object:root=true

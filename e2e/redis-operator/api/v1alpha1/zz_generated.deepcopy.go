@@ -31,6 +31,12 @@ func (in *AuthSpec) DeepCopy() *AuthSpec {
 	out := new(AuthSpec); in.DeepCopyInto(out); return out
 }
 
+func (in *SentinelSpec) DeepCopyInto(out *SentinelSpec) { *out = *in }
+func (in *SentinelSpec) DeepCopy() *SentinelSpec {
+	if in == nil { return nil }
+	out := new(SentinelSpec); in.DeepCopyInto(out); return out
+}
+
 func (in *RedisCluster) DeepCopyInto(out *RedisCluster) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
@@ -73,6 +79,11 @@ func (in *RedisClusterSpec) DeepCopyInto(out *RedisClusterSpec) {
 	if in.Auth != nil {
 		in, out := &in.Auth, &out.Auth
 		*out = new(AuthSpec)
+		**out = **in
+	}
+	if in.Sentinel != nil {
+		in, out := &in.Sentinel, &out.Sentinel
+		*out = new(SentinelSpec)
 		**out = **in
 	}
 }

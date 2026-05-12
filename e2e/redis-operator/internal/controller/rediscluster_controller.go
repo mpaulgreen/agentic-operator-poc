@@ -56,6 +56,7 @@ type RedisClusterReconciler struct {
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -119,6 +120,10 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return r.handleError(ctx, cr, "PDBReconcileFailed", err)
 	}
 
+	if err := r.reconcileSentinel(ctx, cr); err != nil {
+		return r.handleError(ctx, cr, "SentinelReconcileFailed", err)
+	}
+
 	// --- PHASE 3: STATUS ---
 	if err := r.updateStatus(ctx, cr); err != nil {
 		logger.Error(err, "Failed to update status")
@@ -176,5 +181,6 @@ func (r *RedisClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
+		Owns(&appsv1.Deployment{}).
 		Complete(r)
 }

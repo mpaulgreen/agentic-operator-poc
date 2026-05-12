@@ -127,6 +127,26 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              sentinel:
+                description: Sentinel defines the optional Redis Sentinel HA configuration.
+                properties:
+                  enabled:
+                    default: false
+                    description: Enabled indicates whether Sentinel HA is active.
+                    type: boolean
+                  image:
+                    description: Image is the container image for Sentinel (optional,
+                      defaults to the Redis image).
+                    type: string
+                  replicas:
+                    default: 3
+                    description: Replicas is the number of Sentinel instances (should
+                      be odd for quorum).
+                    format: int32
+                    maximum: 7
+                    minimum: 3
+                    type: integer
+                type: object
               storage:
                 description: Storage defines the persistent storage configuration.
                 properties:
@@ -245,6 +265,9 @@ spec:
                   ready.
                 format: int32
                 type: integer
+              sentinelEndpoint:
+                description: SentinelEndpoint is the Sentinel service connection endpoint.
+                type: string
             type: object
         type: object
     served: true

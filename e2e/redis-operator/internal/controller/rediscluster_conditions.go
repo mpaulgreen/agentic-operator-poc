@@ -32,6 +32,8 @@ const (
 
 	// ConditionDegraded indicates the RedisCluster has reduced capacity or errors.
 	ConditionDegraded = "Degraded"
+
+	ConditionSentinelReady = "SentinelReady"
 )
 
 // setCondition adds or updates a condition on the RedisCluster status.
@@ -92,4 +94,12 @@ func setDegradedCondition(cr *cachev1alpha1.RedisCluster, reason, message string
 // clearDegradedCondition sets the Degraded condition to False.
 func clearDegradedCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
 	setCondition(cr, ConditionDegraded, metav1.ConditionFalse, reason, message)
+}
+
+func setSentinelReadyCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+	setCondition(cr, ConditionSentinelReady, metav1.ConditionTrue, reason, message)
+}
+
+func clearSentinelReadyCondition(cr *cachev1alpha1.RedisCluster, reason, message string) {
+	setCondition(cr, ConditionSentinelReady, metav1.ConditionFalse, reason, message)
 }

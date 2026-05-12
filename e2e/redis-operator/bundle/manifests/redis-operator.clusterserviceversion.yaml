@@ -43,7 +43,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/redis-operator
-  name: redis-operator.v0.1.0
+  name: redis-operator.v0.2.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -65,6 +65,8 @@ spec:
         version: v1
       - kind: PodDisruptionBudget
         version: v1
+      - kind: Deployment
+        version: v1
       specDescriptors:
       - path: replicas
         displayName: Replicas
@@ -81,6 +83,15 @@ spec:
       - path: auth
         displayName: Auth
         description: Optional authentication configuration
+      - path: sentinel
+        displayName: Sentinel
+        description: Redis Sentinel HA configuration
+      - path: sentinel.enabled
+        displayName: Enabled
+        description: Whether Sentinel HA is active
+      - path: sentinel.replicas
+        displayName: Replicas
+        description: Number of Sentinel instances
       statusDescriptors:
       - path: phase
         displayName: Phase
@@ -97,6 +108,9 @@ spec:
       - path: conditions
         displayName: Conditions
         description: Latest available observations of the resource state
+      - path: sentinelEndpoint
+        displayName: Sentinel Endpoint
+        description: Sentinel service connection endpoint
   description: |
     ## Overview
     The Redis Operator manages Redis clusters on Kubernetes.
@@ -204,6 +218,18 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         serviceAccountName: redis-operator-controller-manager
       deployments:
       - label:
@@ -232,7 +258,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/redis-operator:v0.1.0
+                image: quay.io/mpaulgreen/redis-operator:v0.2.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -324,4 +350,5 @@ spec:
   provider:
     name: Example
     url: https://example.com
-  version: 0.1.0
+  replaces: redis-operator.v0.1.0
+  version: 0.2.0

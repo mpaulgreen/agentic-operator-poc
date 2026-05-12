@@ -313,7 +313,7 @@ Operator projects are complex and diverse. E2E validation is organized by operat
 
 | Category | Examples | Patterns Tested | Status |
 |----------|---------|-----------------|--------|
-| **Stateful Workloads** | PostgreSQL, Redis, Kafka, MongoDB, Elasticsearch | StatefulSet, PVC, backup CronJob, connection pooling, HA (PDB/anti-affinity) | **PostgreSQL DONE** (111/111), **Redis A DONE** (34/34, 0 skill fixes) |
+| **Stateful Workloads** | PostgreSQL, Redis, Kafka, MongoDB, Elasticsearch | StatefulSet, PVC, backup CronJob, connection pooling, HA (PDB/anti-affinity) | **PostgreSQL DONE** (111/111), **Redis A+B DONE** (56/56, 0 skill fixes) |
 | **Application Platform** | RHOAI, Tekton, ArgoCD, ServiceMesh | Deployment, multi-component, cross-namespace | Planned |
 | **Infrastructure / Cloud** | Cluster autoscaler, node management | Cluster-scoped CRDs, node selectors, taints | Planned |
 | **Network / Security** | cert-manager, Kuadrant, External DNS | Webhooks, NetworkPolicy, TLS certificates, ingress | Partial (tested within PostgreSQL C) |
@@ -347,7 +347,7 @@ Different stateful workload to validate skill generality. Tests 5 scenarios (A-E
 - **Prompts**: [`e2e/docs/statefulsets/redis-prompts.md`](../e2e/docs/statefulsets/redis-prompts.md)
 - **Validation guide**: [`e2e/docs/statefulsets/redis-e2e-validation.md`](../e2e/docs/statefulsets/redis-e2e-validation.md)
 - **Operator code**: `e2e/redis-operator/`
-- **Results**: Scenario A complete — 34/34 test conditions pass on OpenShift (both deploy paths), zero skill modifications needed. Scenarios B-E pending.
+- **Results**: Scenarios A+B complete — 56/56 test conditions pass on OpenShift (both deploy paths), zero skill modifications needed. Scenarios C-E pending.
 
 #### Kafka Operator (Planned)
 
@@ -397,4 +397,4 @@ Multi-component stateful workload (ZooKeeper + Kafka brokers + topic management)
 | 8 | operator-bundle-validator | 8.1, 8.2 | I-8 | A, B, C, D |
 | Final | All components | — | — | A, B, C, D |
 
-**Total**: 16 unit tests + 7 integration tests + E2E scenarios (PostgreSQL 111 + Redis 34 = 145 OpenShift test conditions) = **168 test points**
+**Total**: 16 unit tests + 7 integration tests + E2E scenarios (PostgreSQL 111 + Redis 56 = 167 OpenShift test conditions) = **190 test points**
