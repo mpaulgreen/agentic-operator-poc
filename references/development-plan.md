@@ -382,16 +382,17 @@ Prompt: "Add High Availability support to the existing PostgreSQL operator at e2
 6. Update the OLM bundle from v0.1.0 to v0.2.0 with replaces set correctly"
 ```
 
-Acceptance criteria:
-- [ ] HASpec struct with minAvailable, maxUnavailable, antiAffinityMode fields and markers
-- [ ] reconcilePodDisruptionBudget() follows check-create idempotency pattern
-- [ ] PDB only created when spec.ha is non-nil
-- [ ] Anti-affinity added to StatefulSet PodTemplateSpec
-- [ ] HAReady condition helpers added
-- [ ] RBAC for policy/poddisruptionbudgets, Owns PDB
-- [ ] ~5 PDB test cases, all existing tests pass
-- [ ] CSV v0.2.0 with replaces v0.1.0, PDB RBAC + descriptors
-- [ ] Code review: 0 Critical, bundle validates
+Acceptance criteria (Scenario B EXECUTED — all pass):
+- [x] HASpec struct with minAvailable, maxUnavailable, antiAffinityMode fields and markers
+- [x] reconcilePodDisruptionBudget() follows check-create idempotency pattern
+- [x] PDB only created when spec.ha is non-nil
+- [x] Anti-affinity added to StatefulSet PodTemplateSpec
+- [x] HAReady condition helpers added
+- [x] RBAC for policy/poddisruptionbudgets, Owns PDB
+- [x] ~5 PDB test cases, all existing tests pass
+- [x] CSV v0.2.0 with replaces v0.1.0, PDB RBAC + descriptors
+- [x] Code review: 0 Critical, bundle validates
+- [x] Deployed to OpenShift: 25/25 test conditions pass (both make deploy and OLM paths)
 
 ---
 
@@ -422,14 +423,15 @@ e2e/postgres-operator/ (which already has HA support at v0.2.0).
 7. Update OLM bundle from v0.2.0 to v0.3.0 with webhook definitions"
 ```
 
-Acceptance criteria:
-- [ ] Webhook handler with Default() + ValidateCreate/Update/Delete()
-- [ ] 9 webhook config files + kustomization updates
-- [ ] reconcileNetworkPolicy() follows check-create pattern
-- [ ] NetworkPolicy allows port 5432 ingress, DNS egress
-- [ ] ~9 webhook + ~2 NP test cases, all existing tests pass
-- [ ] CSV v0.3.0 with replaces v0.2.0, webhookdefinitions, NP RBAC
-- [ ] Code review: 0 Critical, bundle validates
+Acceptance criteria (Scenario C EXECUTED — all pass):
+- [x] Webhook handler with Default() + ValidateCreate/Update/Delete()
+- [x] 9 webhook config files + kustomization updates
+- [x] reconcileNetworkPolicy() follows check-create pattern
+- [x] NetworkPolicy allows port 5432 ingress, DNS egress
+- [x] ~9 webhook + ~2 NP test cases, all existing tests pass
+- [x] CSV v0.3.0 with replaces v0.2.0, webhookdefinitions, NP RBAC
+- [x] Code review: 0 Critical, bundle validates
+- [x] Deployed to OpenShift: 27/27 test conditions pass (both make deploy and OLM paths)
 
 ---
 
@@ -459,14 +461,15 @@ at e2e/postgres-operator/ (which already has HA + webhooks at v0.3.0).
    maturity alpha→beta"
 ```
 
-Acceptance criteria:
-- [ ] api/v1beta1/ directory with groupversion_info.go, types.go, deepcopy, webhook
-- [ ] v1beta1 has +kubebuilder:storageversion, v1alpha1 does not
-- [ ] ConnectionPoolSpec with enabled, poolSize, maxClientConnections, idleTimeout
-- [ ] reconcileConnectionPool() creates Deployment + Service when enabled, deletes when disabled
-- [ ] ~8 connection pool + webhook test cases, all existing tests pass
-- [ ] CSV v0.4.0 with replaces v0.3.0, multi-version CRD, maturity=beta
-- [ ] Code review: 0 Critical, bundle validates
+Acceptance criteria (Scenario D EXECUTED — all pass):
+- [x] api/v1beta1/ directory with groupversion_info.go, types.go, deepcopy, webhook
+- [x] v1beta1 has +kubebuilder:storageversion, v1alpha1 does not
+- [x] ConnectionPoolSpec with enabled, poolSize, maxClientConnections, idleTimeout
+- [x] reconcileConnectionPool() creates Deployment + Service when enabled, deletes when disabled
+- [x] ~8 connection pool + webhook test cases, all existing tests pass
+- [x] CSV v0.4.0 with replaces v0.3.0, multi-version CRD, maturity=beta
+- [x] Code review: 0 Critical, bundle validates
+- [x] Deployed to OpenShift: 28/28 test conditions pass (both make deploy and OLM paths)
 
 ---
 

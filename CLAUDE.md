@@ -209,11 +209,12 @@ All 8 sprints complete. 5 skills (99 files) + 3 subagents built and validated.
   - Test 8.1 PASS: Correct bundle validated (3/3 scripts pass, 7/8 certification checklist — only gap: empty icon)
   - Test 8.2 PASS: Flawed bundle — all 4 planted issues detected (missing annotations, missing installModes, invalid alm-examples, non-existent descriptor path)
 
-### Status: ALL SPRINTS COMPLETE + E2E SCENARIOS A, B & C VALIDATED
+### Status: ALL SPRINTS COMPLETE + ALL 4 E2E SCENARIOS VALIDATED
 - 5 skills: scaffolding-operator (29), designing-operator-api (24), implementing-reconciliation (19), testing-operator (12), bundling-operator (15) = **99 skill files**
 - 3 subagents: operator-reviewer, operator-test-generator, operator-bundle-validator
 - E2E Scenario A (Core PostgreSQL operator v0.1.0): **DONE** — 12/12 phases, 31 test conditions pass on OpenShift
 - E2E Scenario B (High Availability v0.2.0): **DONE** — 12/12 phases, 25 test conditions pass on OpenShift (both `make deploy` and OLM paths)
-- E2E Scenario C (Webhooks + Network Security v0.3.0): **DONE** — 10/10 phases, 27 test conditions pass on OpenShift (`make deploy` path, cert-manager required)
-- 14 skill bugs traced and fixed across Scenarios A+B+C (#11: check-update for modified reconcilers, #12: bundle CRD refresh, #13: check-update scope, #14: cert-manager kustomize replacements)
-- Next: E2E Scenario D (API versioning + Connection Pooling)
+- E2E Scenario C (Webhooks + Network Security v0.3.0): **DONE** — 10/10 phases, 27 test conditions pass on OpenShift (both `make deploy` and OLM paths, cert-manager required)
+- E2E Scenario D (API Maturity + Connection Pooling v0.4.0): **DONE** — 10/10 phases, 28 test conditions pass on OpenShift (both `make deploy` and OLM paths)
+- 17 skill bugs traced and fixed across all scenarios
+- **111 total E2E test conditions across 4 scenarios — ALL PASS**
