@@ -44,9 +44,10 @@ See [architecture.md](architecture.md) for the full design rationale, directory 
 ```
 agentic-operator-poc/
 ├── architecture.md              # Full architecture and design decisions
+├── CLAUDE.md                    # Project context for Claude Code sessions
 ├── references/                  # Research and planning documents
 │   ├── openshift-operator-research.md
-│   └── development-plan.md
+│   └── development-plan.md     # Sprint plan + E2E validation categories
 ├── tests/                       # Test guides and gap analyses per skill
 │   ├── scaffolding-operator/
 │   ├── designing-operator-api/
@@ -56,6 +57,12 @@ agentic-operator-poc/
 │   ├── operator-reviewer/
 │   ├── operator-test-generator/
 │   └── operator-bundle-validator/
+├── e2e/                         # E2E scenario tests (by operator category)
+│   ├── postgres-operator/       # PostgreSQL operator (Scenarios A-D, v0.1.0→v0.4.0)
+│   └── docs/
+│       └── statefulsets/
+│           ├── postgres-prompts.md         # Scenario prompts + acceptance criteria
+│           └── postgres-e2e-validation.md  # OpenShift validation guide (111 tests)
 ├── .claude/
 │   ├── agents/                  # Subagent definitions
 │   │   ├── operator-reviewer.md
@@ -67,7 +74,6 @@ agentic-operator-poc/
 │       ├── implementing-reconciliation/ (19 files)
 │       ├── testing-operator/           (12 files)
 │       └── bundling-operator/          (15 files)
-└── CLAUDE.md                    # Project context for Claude Code sessions
 ```
 
 ## How to Use
