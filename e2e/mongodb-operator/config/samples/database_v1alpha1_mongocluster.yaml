@@ -1,0 +1,8 @@
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  labels:
+    app.kubernetes.io/name: mongodb-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mongocluster-sample
+spec: {}

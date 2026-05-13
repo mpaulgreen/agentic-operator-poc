@@ -209,10 +209,13 @@ All 8 sprints complete. 5 skills (99 files) + 3 subagents built and validated.
   - Test 8.1 PASS: Correct bundle validated (3/3 scripts pass, 7/8 certification checklist — only gap: empty icon)
   - Test 8.2 PASS: Flawed bundle — all 4 planted issues detected (missing annotations, missing installModes, invalid alm-examples, non-existent descriptor path)
 
-### Status: ALL SPRINTS COMPLETE + E2E VALIDATED (2 OPERATORS)
+### Status: ALL SPRINTS COMPLETE + E2E VALIDATED (3 OPERATORS)
 - 5 skills: scaffolding-operator (29), designing-operator-api (24), implementing-reconciliation (19), testing-operator (12), bundling-operator (15) = **99 skill files**
 - 3 subagents: operator-reviewer, operator-test-generator, operator-bundle-validator
 - **PostgreSQL Operator** (4 scenarios A-D): **DONE** — 111/111 test conditions pass on OpenShift (both deploy paths)
 - **Redis Operator** (Scenarios A-E): **DONE** — 139/139 test conditions pass on OpenShift (both deploy paths, zero skill modifications)
-- 17 skill bugs traced and fixed (all from PostgreSQL); Redis required zero additional fixes — **skills validated as general-purpose**
-- **250 total E2E test conditions across 2 operators — ALL PASS**
+- **MongoDB Operator** (Scenario A): **DONE** — 41/41 test conditions pass on OpenShift (both deploy paths, 1 skill fix: Bug #18 check-idempotency.py List() support)
+- 18 skill bugs traced and fixed (17 from PostgreSQL, 1 from MongoDB); Redis required zero fixes
+- **291 total E2E test conditions across 3 operators — ALL PASS**
+- New gap validated: **Job (batch/v1) reconciliation** — first time tested across all operators
+- Next: MongoDB Scenarios B-E

@@ -1,0 +1,330 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "database.mongodb.example.com/v1alpha1",
+          "kind": "MongoCluster",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "mongodb-operator"
+            },
+            "name": "mongocluster-sample"
+          },
+          "spec": {
+            "replicas": 3,
+            "version": "7.0",
+            "storage": {
+              "size": "10Gi"
+            },
+            "backup": {
+              "enabled": true,
+              "retentionDays": 7
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    categories: Database
+    certified: "false"
+    createdAt: "2026-05-12T00:00:00Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.37.0
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/example/mongodb-operator
+  name: mongodb-operator.v0.1.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: MongoCluster is the Schema for the mongoclusters API
+      displayName: Mongo Cluster
+      kind: MongoCluster
+      name: mongoclusters.database.mongodb.example.com
+      version: v1alpha1
+      resources:
+      - kind: StatefulSet
+        version: v1
+      - kind: Service
+        version: v1
+      - kind: Secret
+        version: v1
+      - kind: ConfigMap
+        version: v1
+      - kind: Job
+        version: v1
+      specDescriptors:
+      - path: replicas
+        displayName: Replicas
+        description: Number of MongoDB replica set members
+      - path: version
+        displayName: Version
+        description: MongoDB major version to deploy
+      - path: storage
+        displayName: Storage
+        description: Persistent storage configuration
+      - path: resources
+        displayName: Resources
+        description: CPU and memory resource requirements
+      - path: auth
+        displayName: Auth
+        description: Optional authentication configuration
+      - path: backup
+        displayName: Backup
+        description: Optional backup configuration
+      - path: backup.enabled
+        displayName: Backup Enabled
+        description: Whether backup is active
+      - path: backup.retentionDays
+        displayName: Retention Days
+        description: Number of days to retain backups
+      statusDescriptors:
+      - path: phase
+        displayName: Phase
+        description: Current lifecycle phase of the MongoCluster
+      - path: readyReplicas
+        displayName: Ready Replicas
+        description: Number of MongoDB instances that are ready
+      - path: currentVersion
+        displayName: Current Version
+        description: Currently running MongoDB version
+      - path: primaryEndpoint
+        displayName: Primary Endpoint
+        description: Client service connection endpoint for the MongoDB cluster
+      - path: conditions
+        displayName: Conditions
+        description: Latest available observations of the resource state
+      - path: lastBackupTime
+        displayName: Last Backup Time
+        description: When the last backup Job completed successfully
+  description: |
+    ## Overview
+    The MongoDB Operator manages MongoCluster resources on OpenShift.
+    It automates deployment, scaling, and lifecycle management of
+    MongoDB replica sets using StatefulSets, Services, Secrets,
+    ConfigMaps, and backup Jobs.
+  displayName: MongoDB Operator
+  icon:
+  - base64data: ""
+    mediatype: "image/svg+xml"
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - database.mongodb.example.com
+          resources:
+          - mongoclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - database.mongodb.example.com
+          resources:
+          - mongoclusters/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - database.mongodb.example.com
+          resources:
+          - mongoclusters/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        serviceAccountName: mongodb-operator-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: mongodb-operator
+          control-plane: controller-manager
+        name: mongodb-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=:8443
+                - --metrics-secure=true
+                - --leader-elect
+                command:
+                - /manager
+                image: quay.io/mpaulgreen/mongodb-operator:v0.1.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: mongodb-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: mongodb-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - mongodb
+  - database
+  - nosql
+  - replica-set
+  links:
+  - name: Documentation
+    url: https://github.com/example/mongodb-operator
+  - name: Source Code
+    url: https://github.com/example/mongodb-operator
+  maintainers:
+  - email: maintainer@example.com
+    name: Maintainer
+  maturity: alpha
+  minKubeVersion: "1.25.0"
+  provider:
+    name: Example
+    url: https://example.com
+  version: 0.1.0

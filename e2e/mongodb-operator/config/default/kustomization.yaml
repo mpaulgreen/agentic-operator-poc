@@ -1,0 +1,14 @@
+namespace: mongodb-operator-system
+
+namePrefix: mongodb-operator-
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+
+# [PROMETHEUS] To enable prometheus monitor, uncomment the following:
+# - ../prometheus
+
+patches:
+- path: manager_config_patch.yaml

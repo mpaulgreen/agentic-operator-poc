@@ -42,14 +42,19 @@ def main():
     else:
         warn("No reconcileX() methods found")
 
-    # Check each method has Get() before Create()
+    # Check each method has Get() or List() before Create()
+    # List() is equivalent to Get() for resources that use label selectors
+    # (e.g., Jobs are immutable and have timestamp-based names, so List() with
+    # label selector is the correct idempotency guard)
     create_count = len(re.findall(r'r\.Create\(', content))
     get_count = len(re.findall(r'r\.Get\(', content))
+    list_count = len(re.findall(r'r\.List\(', content))
+    existence_checks = get_count + list_count
 
-    if create_count > 0 and get_count >= create_count:
-        ok(f"Get() calls ({get_count}) >= Create() calls ({create_count}) — idempotency guard present")
-    elif create_count > 0 and get_count < create_count:
-        fail(f"Create() calls ({create_count}) > Get() calls ({get_count}) — possible non-idempotent creates")
+    if create_count > 0 and existence_checks >= create_count:
+        ok(f"Get()/List() calls ({existence_checks}) >= Create() calls ({create_count}) — idempotency guard present")
+    elif create_count > 0 and existence_checks < create_count:
+        fail(f"Create() calls ({create_count}) > Get()/List() calls ({existence_checks}) — possible non-idempotent creates")
     elif create_count == 0:
         warn("No Create() calls found")
 
