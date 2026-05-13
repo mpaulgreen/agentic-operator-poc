@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1beta1
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-var mongoclusterlog = logf.Log.WithName("mongocluster-resource")
+var mongoclusterlog = logf.Log.WithName("mongocluster-v1beta1-resource")
 
 func (r *MongoCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -35,7 +35,7 @@ func (r *MongoCluster) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-database-mongodb-example-com-v1alpha1-mongocluster,mutating=true,failurePolicy=fail,sideEffects=None,groups=database.mongodb.example.com,resources=mongoclusters,verbs=create;update,versions=v1alpha1,name=mmongoclusterv1alpha1.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/mutate-database-mongodb-example-com-v1beta1-mongocluster,mutating=true,failurePolicy=fail,sideEffects=None,groups=database.mongodb.example.com,resources=mongoclusters,verbs=create;update,versions=v1beta1,name=mmongoclusterv1beta1.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &MongoCluster{}
 
@@ -53,7 +53,7 @@ func (r *MongoCluster) Default() {
 	}
 }
 
-//+kubebuilder:webhook:path=/validate-database-mongodb-example-com-v1alpha1-mongocluster,mutating=false,failurePolicy=fail,sideEffects=None,groups=database.mongodb.example.com,resources=mongoclusters,verbs=create;update,versions=v1alpha1,name=vmongoclusterv1alpha1.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-database-mongodb-example-com-v1beta1-mongocluster,mutating=false,failurePolicy=fail,sideEffects=None,groups=database.mongodb.example.com,resources=mongoclusters,verbs=create;update,versions=v1beta1,name=vmongoclusterv1beta1.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &MongoCluster{}
 
@@ -102,6 +102,11 @@ func (r *MongoCluster) validateMongoCluster() error {
 	}
 	if r.Spec.Backup != nil && r.Spec.Backup.RetentionDays > 30 {
 		return fmt.Errorf("backup.retentionDays must be at most 30, got %d", r.Spec.Backup.RetentionDays)
+	}
+	if r.Spec.Sharding != nil && r.Spec.Sharding.Enabled {
+		if r.Spec.Sharding.Shards < 1 {
+			return fmt.Errorf("sharding.shards must be at least 1 when sharding is enabled, got %d", r.Spec.Sharding.Shards)
+		}
 	}
 	return nil
 }

@@ -35,10 +35,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	databasev1alpha1 "github.com/example/mongodb-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/mongodb-operator/api/v1beta1"
 )
 
-func (r *MongoClusterReconciler) reconcileAdminSecret(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileAdminSecret(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	if cr.Spec.Auth != nil && cr.Spec.Auth.ExistingSecret != "" {
 		return nil
 	}
@@ -85,7 +85,7 @@ func (r *MongoClusterReconciler) reconcileAdminSecret(ctx context.Context, cr *d
 	return nil
 }
 
-func (r *MongoClusterReconciler) reconcileKeyFileSecret(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileKeyFileSecret(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	if cr.Spec.Auth != nil && cr.Spec.Auth.KeyFile != "" {
 		return nil
 	}
@@ -126,7 +126,7 @@ func (r *MongoClusterReconciler) reconcileKeyFileSecret(ctx context.Context, cr 
 	return nil
 }
 
-func (r *MongoClusterReconciler) reconcileConfigMap(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileConfigMap(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	name := fmt.Sprintf("%s-config", cr.Name)
 	existing := &corev1.ConfigMap{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
@@ -174,7 +174,7 @@ security:
 	return nil
 }
 
-func (r *MongoClusterReconciler) reconcileHeadlessService(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileHeadlessService(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	name := fmt.Sprintf("%s-headless", cr.Name)
 	existing := &corev1.Service{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
@@ -220,7 +220,7 @@ func (r *MongoClusterReconciler) reconcileHeadlessService(ctx context.Context, c
 	return nil
 }
 
-func (r *MongoClusterReconciler) reconcileClientService(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileClientService(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	name := fmt.Sprintf("%s-client", cr.Name)
 	existing := &corev1.Service{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
@@ -266,7 +266,7 @@ func (r *MongoClusterReconciler) reconcileClientService(ctx context.Context, cr 
 	return nil
 }
 
-func (r *MongoClusterReconciler) reconcileStatefulSet(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileStatefulSet(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	name := cr.Name
 	existing := &appsv1.StatefulSet{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
@@ -416,7 +416,7 @@ func (r *MongoClusterReconciler) reconcileStatefulSet(ctx context.Context, cr *d
 	return nil
 }
 
-func (r *MongoClusterReconciler) reconcileNetworkPolicy(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileNetworkPolicy(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	name := fmt.Sprintf("%s-network-policy", cr.Name)
 	existing := &networkingv1.NetworkPolicy{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
@@ -509,7 +509,7 @@ func (r *MongoClusterReconciler) reconcileNetworkPolicy(ctx context.Context, cr 
 	return nil
 }
 
-func (r *MongoClusterReconciler) reconcileArbiter(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileArbiter(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	name := fmt.Sprintf("%s-arbiter", cr.Name)
 
 	if cr.Spec.Arbiter == nil || !cr.Spec.Arbiter.Enabled {
@@ -612,7 +612,7 @@ func (r *MongoClusterReconciler) reconcileArbiter(ctx context.Context, cr *datab
 	return nil
 }
 
-func (r *MongoClusterReconciler) reconcileBackupJob(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) reconcileBackupJob(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	if cr.Spec.Backup == nil || !cr.Spec.Backup.Enabled {
 		clearBackupReadyCondition(cr, "BackupDisabled", "Backup is not enabled")
 		return nil

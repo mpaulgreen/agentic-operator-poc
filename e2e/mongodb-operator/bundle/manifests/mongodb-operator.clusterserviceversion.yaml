@@ -5,7 +5,7 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "database.mongodb.example.com/v1alpha1",
+          "apiVersion": "database.mongodb.example.com/v1beta1",
           "kind": "MongoCluster",
           "metadata": {
             "labels": {
@@ -34,7 +34,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/mongodb-operator
-  name: mongodb-operator.v0.3.0
+  name: mongodb-operator.v0.4.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -44,7 +44,7 @@ spec:
       displayName: Mongo Cluster
       kind: MongoCluster
       name: mongoclusters.database.mongodb.example.com
-      version: v1alpha1
+      version: v1beta1
       resources:
       - kind: StatefulSet
         version: v1
@@ -91,6 +91,21 @@ spec:
       - path: arbiter.enabled
         displayName: Arbiter Enabled
         description: Whether the arbiter node is active
+      - path: sharding
+        displayName: Sharding
+        description: Optional sharding configuration
+      - path: sharding.enabled
+        displayName: Sharding Enabled
+        description: Whether sharding is active
+      - path: sharding.shards
+        displayName: Shards
+        description: Number of shards
+      - path: sharding.configServerReplicas
+        displayName: Config Server Replicas
+        description: Number of config server replicas
+      - path: maxConnections
+        displayName: Max Connections
+        description: Maximum number of incoming connections
       statusDescriptors:
       - path: phase
         displayName: Phase
@@ -110,6 +125,9 @@ spec:
       - path: lastBackupTime
         displayName: Last Backup Time
         description: When the last backup Job completed successfully
+      - path: shardingEnabled
+        displayName: Sharding Enabled
+        description: Whether sharding is currently active
   description: |
     ## Overview
     The MongoDB Operator manages MongoCluster resources on OpenShift.
@@ -117,11 +135,11 @@ spec:
     MongoDB replica sets using StatefulSets, Services, Secrets,
     ConfigMaps, backup Jobs, and Arbiter Deployments.
 
-    ## v0.3.0 — Webhooks + Network Security
-    - Added defaulting/validating admission webhooks
-    - Webhook defaults: replicas, version, backup retentionDays
-    - Webhook validation: odd replicas, auth mutual exclusion, storage reduction
-    - Added NetworkPolicy for cluster isolation (port 27017 ingress, DNS egress)
+    ## v0.4.0 — API Versioning + Sharding Config
+    - Promoted API to v1beta1 (storage version)
+    - Added ShardingSpec (enabled, shards, configServerReplicas)
+    - Added maxConnections configuration
+    - Maturity: alpha → beta
   displayName: MongoDB Operator
   icon:
   - base64data: ""
@@ -275,7 +293,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/mongodb-operator:v0.3.0
+                image: quay.io/mpaulgreen/mongodb-operator:v0.4.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -362,25 +380,25 @@ spec:
   maintainers:
   - email: maintainer@example.com
     name: Maintainer
-  maturity: alpha
+  maturity: beta
   minKubeVersion: "1.25.0"
   provider:
     name: Example
     url: https://example.com
-  replaces: mongodb-operator.v0.2.0
-  version: 0.3.0
+  replaces: mongodb-operator.v0.3.0
+  version: 0.4.0
   webhookdefinitions:
   - admissionReviewVersions:
     - v1
     containerPort: 9443
     deploymentName: mongodb-operator-controller-manager
     failurePolicy: Fail
-    generateName: mmongoclusterv1alpha1.kb.io
+    generateName: mmongoclusterv1beta1.kb.io
     rules:
     - apiGroups:
       - database.mongodb.example.com
       apiVersions:
-      - v1alpha1
+      - v1beta1
       operations:
       - CREATE
       - UPDATE
@@ -389,18 +407,18 @@ spec:
     sideEffects: None
     targetPort: 9443
     type: MutatingAdmissionWebhook
-    webhookPath: /mutate-database-mongodb-example-com-v1alpha1-mongocluster
+    webhookPath: /mutate-database-mongodb-example-com-v1beta1-mongocluster
   - admissionReviewVersions:
     - v1
     containerPort: 9443
     deploymentName: mongodb-operator-controller-manager
     failurePolicy: Fail
-    generateName: vmongoclusterv1alpha1.kb.io
+    generateName: vmongoclusterv1beta1.kb.io
     rules:
     - apiGroups:
       - database.mongodb.example.com
       apiVersions:
-      - v1alpha1
+      - v1beta1
       operations:
       - CREATE
       - UPDATE
@@ -409,4 +427,4 @@ spec:
     sideEffects: None
     targetPort: 9443
     type: ValidatingAdmissionWebhook
-    webhookPath: /validate-database-mongodb-example-com-v1alpha1-mongocluster
+    webhookPath: /validate-database-mongodb-example-com-v1beta1-mongocluster

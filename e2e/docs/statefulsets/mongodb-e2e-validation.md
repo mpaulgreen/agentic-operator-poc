@@ -1628,3 +1628,441 @@ sleep 15
 | 23 | Webhook definitions in CSV | C.10 | Both paths |
 | 24 | NP RBAC in CSV | C.10 | networking.k8s.io |
 | 25 | Bundle validates | C.10 | No errors |
+
+---
+---
+
+# Scenario D: API Maturity + Sharding Config (v0.4.0)
+
+Promotes the API to v1beta1 (storage version) and adds ShardingSpec + maxConnections. Built using:
+- **Step 1** (Generate): `designing-operator-api` SKILL (Workflow D) — Created api/v1beta1/ with storageversion, ShardingSpec, maxConnections, v1beta1 webhook; deleted v1alpha1 webhook (Bug #16)
+- **Step 2** (Generate): `implementing-reconciliation` SKILL (Workflow B) — Migrated controller imports v1alpha1 → v1beta1
+- **Step 3a** (Test): `operator-test-generator` SUBAGENT (Workflow B) — Added v1beta1 webhook + sharding tests
+- **Step 3b** (Review): `operator-reviewer` SUBAGENT — Reviewed modified code (0 Critical, 0 Warnings)
+- **Step 4** (Generate): `bundling-operator` SKILL (Workflow B) — Updated CSV v0.3.0 → v0.4.0, multi-version CRD, maturity beta, only v1beta1 webhookdefinitions
+- **Step 5** (Validate): `operator-bundle-validator` SUBAGENT — Validated updated bundle
+
+**Changes**: v1beta1 API (storage version) with ShardingSpec (enabled, shards, configServerReplicas) and maxConnections (*int32), v1alpha1 webhook file deleted (Bug #16), only v1beta1 webhook registered in main.go, CRD conversion strategy: None (Bug #15), CSV v0.4.0 with replaces + maturity=beta + only v1beta1 webhookdefinitions.
+
+**Key Bug Regressions**: Bug #15 (CRD conversion strategy: None, no webhook patch), Bug #16 (only v1beta1 webhook, old v1alpha1 webhook file deleted).
+
+**Prerequisites**:
+- Scenario C completed successfully. All Scenario C CRs deleted.
+- cert-manager operator installed (from Scenario C).
+
+## Scenario D Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/mongodb-operator:v0.4.0
+export BUNDLE_IMG=quay.io/mpaulgreen/mongodb-operator-bundle:v0.4.0
+export NAMESPACE=mongodb-operator-system
+
+cd e2e/mongodb-operator
+```
+
+---
+
+## Phase D.1: Build and Deploy v0.4.0
+
+### D.1.1 Build the Operator Image
+
+```bash
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### D.1.2 Deploy the Operator
+
+#### Option A: `make deploy` (Development)
+
+```bash
+make manifests
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/mongodb-operator:v0.4.0|$IMG|g" bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+
+# Refresh CRD in bundle (multi-version)
+make manifests
+cp config/crd/bases/database.mongodb.example.com_mongoclusters.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### D.1.3 Verify Deployment
+
+```bash
+# Operator pod running
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+
+# CRD has both versions
+oc get crd mongoclusters.database.mongodb.example.com -o jsonpath='{.spec.versions[*].name}' && echo ""
+
+# v1beta1 is storage version
+oc get crd mongoclusters.database.mongodb.example.com -o jsonpath='{range .spec.versions[*]}{.name}: storage={.storage}{"\n"}{end}'
+
+# CRD has sharding and maxConnections fields in v1beta1
+oc get crd mongoclusters.database.mongodb.example.com -o jsonpath='{.spec.versions[?(@.name=="v1beta1")].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+
+# No conversion webhook (Bug #15 — strategy: None)
+oc get crd mongoclusters.database.mongodb.example.com -o jsonpath='{.spec.conversion}' && echo " (should be empty or strategy: None)" || echo "No conversion section (correct — strategy: None)"
+
+# Webhook configs registered — only v1beta1 paths (Bug #16)
+oc get mutatingwebhookconfiguration -o jsonpath='{range .items[*]}{.metadata.name}{": "}{range .webhooks[*]}{.clientConfig.service.path}{" "}{end}{"\n"}{end}' | grep mongo
+oc get validatingwebhookconfiguration -o jsonpath='{range .items[*]}{.metadata.name}{": "}{range .webhooks[*]}{.clientConfig.service.path}{" "}{end}{"\n"}{end}' | grep mongo
+
+# Controller logs
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=20 | grep -E "Starting EventSource|Starting workers"
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.4.0 image
+- [ ] CRD has both v1alpha1 and v1beta1 versions
+- [ ] v1beta1 is the storage version (storage=true)
+- [ ] v1beta1 schema has sharding and maxConnections fields
+- [ ] No conversion webhook section in CRD (Bug #15: strategy: None)
+- [ ] Only v1beta1 webhook paths registered (Bug #16)
+- [ ] Controller watching EventSources
+
+---
+
+## Phase D.2: v1beta1 API + Existing Features Regression
+
+### D.2.1 Create CR with v1beta1 API
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: database.mongodb.example.com/v1beta1
+kind: MongoCluster
+metadata:
+  name: mongo-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.0"
+  storage:
+    size: 1Gi
+  arbiter:
+    enabled: true
+EOF
+
+sleep 30
+```
+
+### D.2.2 Verify All A+B+C Resources Created
+
+```bash
+echo "=== Managed Resources ==="
+oc get secret mongo-test-admin -n $NAMESPACE && echo "PASS: Admin Secret" || echo "FAIL"
+oc get secret mongo-test-keyfile -n $NAMESPACE && echo "PASS: KeyFile Secret" || echo "FAIL"
+oc get configmap mongo-test-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+oc get service mongo-test-headless -n $NAMESPACE && echo "PASS: Headless" || echo "FAIL"
+oc get service mongo-test-client -n $NAMESPACE && echo "PASS: Client" || echo "FAIL"
+oc get statefulset mongo-test -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL"
+oc get deployment mongo-test-arbiter -n $NAMESPACE && echo "PASS: Arbiter" || echo "FAIL"
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy" || echo "FAIL"
+
+echo ""
+echo "=== Status ==="
+oc get mongocluster mongo-test -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All 8 existing resources created (Secret×2, ConfigMap, Service×2, StatefulSet, Arbiter, NetworkPolicy)
+- [ ] Status shows Running with v1beta1 apiVersion
+
+---
+
+## Phase D.3: Sharding Webhook Validation
+
+### D.3.1 Reject Sharding Enabled With Shards < 1
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: database.mongodb.example.com/v1beta1
+kind: MongoCluster
+metadata:
+  name: mongo-bad-shard
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.0"
+  storage:
+    size: 1Gi
+  sharding:
+    enabled: true
+    shards: 0
+EOF
+```
+
+**Expected**: Rejected — `sharding.shards must be at least 1 when sharding is enabled`.
+
+### D.3.2 Existing Webhook Validations Still Work (v1beta1 Paths)
+
+```bash
+# Reject even replicas
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: database.mongodb.example.com/v1beta1
+kind: MongoCluster
+metadata:
+  name: mongo-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 4
+  version: "7.0"
+  storage:
+    size: 1Gi
+EOF
+```
+
+**Expected**: Rejected — replicas must be odd for replica set elections.
+
+### D.3.3 Storage Reduction Still Rejected (v1beta1)
+
+```bash
+oc get mongocluster mongo-test -n $NAMESPACE -o jsonpath='{.spec.storage.size}' && echo " (current size)"
+
+oc patch mongocluster mongo-test -n $NAMESPACE --type merge -p '{"spec":{"storage":{"size":"500Mi"}}}' 2>&1
+```
+
+**Expected**: Rejected — storage size cannot be reduced.
+
+---
+
+## Phase D.4: v1alpha1 Backward Compatibility
+
+### D.4.1 v1alpha1 CRs Still Accessible
+
+```bash
+oc get mongocluster.v1alpha1.database.mongodb.example.com mongo-test -n $NAMESPACE -o jsonpath='{.apiVersion}' 2>&1 && echo "" || echo "v1alpha1 endpoint accessible"
+```
+
+**Expected**: CR is accessible through v1alpha1 API endpoint.
+
+### D.4.2 Create CR with v1alpha1 API (Still Works)
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  name: mongo-v1alpha1-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 1
+  version: "7.0"
+  storage:
+    size: 1Gi
+EOF
+
+sleep 10
+oc get mongocluster mongo-v1alpha1-test -n $NAMESPACE -o wide
+oc delete mongocluster mongo-v1alpha1-test -n $NAMESPACE
+```
+
+**Expected**: v1alpha1 CRs can still be created and managed.
+
+---
+
+## Phase D.5: Webhook Defaulting (v1beta1)
+
+### D.5.1 Verify Defaults Still Work via v1beta1
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: database.mongodb.example.com/v1beta1
+kind: MongoCluster
+metadata:
+  name: mongo-defaults-v1beta1
+  namespace: $NAMESPACE
+spec:
+  storage:
+    size: 1Gi
+EOF
+
+sleep 5
+oc get mongocluster mongo-defaults-v1beta1 -n $NAMESPACE -o jsonpath='{.spec.replicas}' && echo " replicas (should be 3)"
+oc get mongocluster mongo-defaults-v1beta1 -n $NAMESPACE -o jsonpath='{.spec.version}' && echo " version (should be 7.0)"
+
+oc delete mongocluster mongo-defaults-v1beta1 -n $NAMESPACE
+```
+
+**Expected**:
+- [ ] `replicas` defaulted to 3
+- [ ] `version` defaulted to "7.0"
+
+---
+
+## Phase D.6: Idempotency
+
+### D.6.1 Re-reconcile
+
+```bash
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment -l control-plane=controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "Secrets: $(oc get secret -n $NAMESPACE 2>&1 | grep -c mongo-test-admin) (should be 1)"
+echo "StatefulSets: $(oc get statefulset -n $NAMESPACE 2>&1 | grep -c 'mongo-test ') (should be 1)"
+echo "Arbiter Deployments: $(oc get deployment -n $NAMESPACE 2>&1 | grep -c mongo-test-arbiter) (should be 1)"
+echo "NetworkPolicies: $(oc get networkpolicy -n $NAMESPACE 2>&1 | grep -c mongo-test) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each, no duplicates.
+
+---
+
+## Phase D.7: Delete CR — All Resources
+
+### D.7.1 Delete and Verify All Resources Cleaned
+
+```bash
+oc delete mongocluster mongo-test -n $NAMESPACE
+sleep 15
+
+oc get secret mongo-test-admin -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Admin Secret"
+oc get secret mongo-test-keyfile -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: KeyFile Secret"
+oc get configmap mongo-test-config -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: ConfigMap"
+oc get service mongo-test-headless -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Headless"
+oc get service mongo-test-client -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Client"
+oc get statefulset mongo-test -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: StatefulSet"
+oc get deployment mongo-test-arbiter -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Arbiter"
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: NetworkPolicy"
+```
+
+**Expected**:
+- [ ] All 8 managed resources garbage collected
+
+---
+
+## Phase D.8: RBAC Verification
+
+### D.8.1 Verify RBAC Still Works
+
+```bash
+oc auth can-i create statefulsets --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS: StatefulSets" || echo "FAIL"
+oc auth can-i create networkpolicies --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS: NetworkPolicies" || echo "FAIL"
+oc auth can-i create deployments --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS: Deployments" || echo "FAIL"
+oc auth can-i create jobs --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS: Jobs" || echo "FAIL"
+```
+
+**Expected**: All return "yes".
+
+---
+
+## Phase D.9: OLM Bundle Validation
+
+### D.9.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*mongodb-operator.v' bundle/manifests/mongodb-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+grep '^  maturity:' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `mongodb-operator.v0.4.0`
+- [ ] replaces: `mongodb-operator.v0.3.0`
+- [ ] version: `0.4.0`
+- [ ] maturity: `beta`
+
+### D.9.2 Verify Multi-Version CRD
+
+```bash
+grep 'name: v1' bundle/manifests/database.mongodb.example.com_mongoclusters.yaml
+grep 'storage:' bundle/manifests/database.mongodb.example.com_mongoclusters.yaml | head -4
+```
+
+**Expected**: Both v1alpha1 and v1beta1 listed, v1beta1 has storage: true.
+
+### D.9.3 Verify Only v1beta1 Webhook Definitions (Bug #16)
+
+```bash
+grep 'webhookPath' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] Only v1beta1 webhook paths: `/mutate-database-mongodb-example-com-v1beta1-mongocluster` and `/validate-database-mongodb-example-com-v1beta1-mongocluster`
+- [ ] NO v1alpha1 webhook paths present
+
+### D.9.4 Verify Sharding Descriptors
+
+```bash
+grep -E 'sharding|maxConnections|shardingEnabled' bundle/manifests/mongodb-operator.clusterserviceversion.yaml | grep 'path:' | head -10
+```
+
+**Expected**: specDescriptors for sharding, sharding.enabled, sharding.shards, sharding.configServerReplicas, maxConnections; statusDescriptors for shardingEnabled.
+
+### D.9.5 No Conversion Webhook Patch (Bug #15)
+
+```bash
+cat config/crd/kustomization.yaml | grep -E 'webhook|conversion' && echo "(check if uncommented)" || echo "PASS: No conversion webhook patch enabled"
+```
+
+**Expected**: No conversion webhook patch enabled.
+
+### D.9.6 Bundle Validate
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario D Cleanup
+
+```bash
+oc delete mongocluster --all -n $NAMESPACE
+sleep 15
+
+# Undeploy the operator:
+make undeploy                                                    # if deployed with make deploy
+# operator-sdk cleanup mongodb-operator --namespace $NAMESPACE     # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario D Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | Operator deploys with v0.4.0 image | D.1 | Pod Running |
+| 2 | CRD has v1alpha1 and v1beta1 | D.1 | Both versions present |
+| 3 | v1beta1 is storage version | D.1 | storage=true |
+| 4 | v1beta1 has sharding + maxConnections fields | D.1 | In CRD schema |
+| 5 | No CRD conversion webhook (Bug #15) | D.1 | strategy: None |
+| 6 | Only v1beta1 webhook paths (Bug #16) | D.1 | No v1alpha1 webhooks |
+| 7 | All A+B+C resources work with v1beta1 CR | D.2 | 8 resources created |
+| 8 | Reject sharding.enabled with shards < 1 | D.3 | Webhook validation |
+| 9 | Odd replicas validation still works (v1beta1) | D.3 | Rejected |
+| 10 | Storage reduction still rejected (v1beta1) | D.3 | Update validation |
+| 11 | v1alpha1 CRs still accessible | D.4 | Backward compatible |
+| 12 | v1alpha1 CRs can still be created | D.4 | Accepted |
+| 13 | Webhook defaults still work (v1beta1) | D.5 | replicas=3, version=7.0 |
+| 14 | Idempotent — no duplicate resources | D.6 | Exactly 1 each |
+| 15 | All 8 resources cleaned on CR delete | D.7 | No orphans |
+| 16 | RBAC works | D.8 | can-i returns yes |
+| 17 | CSV version 0.4.0 with replaces | D.9 | Correct upgrade path |
+| 18 | maturity: beta | D.9 | Upgraded from alpha |
+| 19 | Multi-version CRD (v1alpha1 + v1beta1) | D.9 | v1beta1 storage |
+| 20 | Only v1beta1 webhookdefinitions (Bug #16) | D.9 | No v1alpha1 paths |
+| 21 | Sharding descriptors in CSV | D.9 | sharding.* + maxConnections |
+| 22 | No conversion webhook patch (Bug #15) | D.9 | No patch |
+| 23 | Bundle validates | D.9 | No errors |

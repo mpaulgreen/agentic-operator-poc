@@ -20,7 +20,7 @@ import (
 	"crypto/rand"
 	"math/big"
 
-	databasev1alpha1 "github.com/example/mongodb-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/mongodb-operator/api/v1beta1"
 )
 
 const (
@@ -30,7 +30,7 @@ const (
 	keyFileCharset  = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"
 )
 
-func labelsForMongoCluster(cr *databasev1alpha1.MongoCluster) map[string]string {
+func labelsForMongoCluster(cr *databasev1beta1.MongoCluster) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "mongodb",
 		"app.kubernetes.io/instance":   cr.Name,
@@ -40,7 +40,7 @@ func labelsForMongoCluster(cr *databasev1alpha1.MongoCluster) map[string]string 
 	}
 }
 
-func imageForMongoCluster(cr *databasev1alpha1.MongoCluster) string {
+func imageForMongoCluster(cr *databasev1beta1.MongoCluster) string {
 	// Red Hat certified MongoDB images (registry.connect.redhat.com/mongodb/enterprise-*)
 	// require enterprise license. For E2E testing, use UBI micro with sleep as a mock
 	// container — tests operator reconciliation, not the MongoDB process.

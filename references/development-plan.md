@@ -313,7 +313,7 @@ Operator projects are complex and diverse. E2E validation is organized by operat
 
 | Category | Examples | Patterns Tested | Status |
 |----------|---------|-----------------|--------|
-| **Stateful Workloads** | PostgreSQL, Redis, Kafka, MongoDB, Elasticsearch | StatefulSet, PVC, backup CronJob/Job, connection pooling, HA (PDB/anti-affinity/arbiter) | **PostgreSQL DONE** (111/111), **Redis A-E DONE** (139/139, 0 fixes), **MongoDB A-C DONE** (84/84, 1 fix) |
+| **Stateful Workloads** | PostgreSQL, Redis, Kafka, MongoDB, Elasticsearch | StatefulSet, PVC, backup CronJob/Job, connection pooling, HA (PDB/anti-affinity/arbiter) | **PostgreSQL DONE** (111/111), **Redis A-E DONE** (139/139, 0 fixes), **MongoDB A-D DONE** (107/107, 1 fix) |
 | **Application Platform** | RHOAI, Tekton, ArgoCD, ServiceMesh | Deployment, multi-component, cross-namespace | Planned |
 | **Infrastructure / Cloud** | Cluster autoscaler, node management | Cluster-scoped CRDs, node selectors, taints | Planned |
 | **Network / Security** | cert-manager, Kuadrant, External DNS | Webhooks, NetworkPolicy, TLS certificates, ingress | Partial (tested within PostgreSQL C) |
@@ -364,14 +364,14 @@ Gap-coverage test targeting untested skill patterns: Job (batch/v1) reconciliati
 - **Prompts**: [`e2e/docs/statefulsets/mongodb-prompts.md`](../e2e/docs/statefulsets/mongodb-prompts.md)
 - **Validation guide**: [`e2e/docs/statefulsets/mongodb-e2e-validation.md`](../e2e/docs/statefulsets/mongodb-e2e-validation.md)
 - **Operator code**: `e2e/mongodb-operator/`
-- **Results**: Scenarios A-C complete — 84/84 test conditions pass on OpenShift (both deploy paths), 1 skill fix (Bug #18: check-idempotency.py List() support). Scenarios D-E pending.
+- **Results**: Scenarios A-D complete — 107/107 test conditions pass on OpenShift (both deploy paths), 1 skill fix (Bug #18: check-idempotency.py List() support). Scenario E pending.
 
 | Scenario | Feature | Version | Tests | Skills Exercised |
 |----------|---------|---------|-------|-----------------|
 | A | Core with Job backup | v0.1.0 | 41 | All 5 skills (Workflow A) + 3 subagents |
 | B | Arbiter node | v0.2.0 | 18 | 4 skills (Workflow B) + 3 subagents |
 | C | Webhooks + NetworkPolicy | v0.3.0 | 25 | 4 skills (Workflow C) + 3 subagents |
-| D | API Maturity + Sharding | v0.4.0 | — | Pending |
+| D | API Maturity + Sharding | v0.4.0 | 23 | 4 skills (Workflow D) + 3 subagents |
 | E | Different-group CRD | v0.5.0 | — | Pending |
 
 #### Kafka Operator (Planned)

@@ -26,10 +26,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	databasev1alpha1 "github.com/example/mongodb-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/mongodb-operator/api/v1beta1"
 )
 
-func (r *MongoClusterReconciler) updateStatus(ctx context.Context, cr *databasev1alpha1.MongoCluster) error {
+func (r *MongoClusterReconciler) updateStatus(ctx context.Context, cr *databasev1beta1.MongoCluster) error {
 	sts := &appsv1.StatefulSet{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, sts); err != nil {
 		return err

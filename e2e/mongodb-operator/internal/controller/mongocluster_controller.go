@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	databasev1alpha1 "github.com/example/mongodb-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/mongodb-operator/api/v1beta1"
 )
 
 const (
@@ -64,7 +64,7 @@ func (r *MongoClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	logger := log.FromContext(ctx)
 
 	// --- PHASE 1: FETCH ---
-	cr := &databasev1alpha1.MongoCluster{}
+	cr := &databasev1beta1.MongoCluster{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("MongoCluster resource not found, likely deleted")
@@ -137,7 +137,7 @@ func (r *MongoClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
-func (r *MongoClusterReconciler) handleDeletion(ctx context.Context, cr *databasev1alpha1.MongoCluster) (ctrl.Result, error) {
+func (r *MongoClusterReconciler) handleDeletion(ctx context.Context, cr *databasev1beta1.MongoCluster) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if controllerutil.ContainsFinalizer(cr, mongoClusterFinalizer) {
@@ -161,7 +161,7 @@ func (r *MongoClusterReconciler) handleDeletion(ctx context.Context, cr *databas
 	return ctrl.Result{}, nil
 }
 
-func (r *MongoClusterReconciler) handleError(ctx context.Context, cr *databasev1alpha1.MongoCluster, reason string, err error) (ctrl.Result, error) {
+func (r *MongoClusterReconciler) handleError(ctx context.Context, cr *databasev1beta1.MongoCluster, reason string, err error) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Error(err, "Reconciliation failed", "reason", reason)
 	r.Recorder.Event(cr, corev1.EventTypeWarning, reason, err.Error())
@@ -177,7 +177,7 @@ func (r *MongoClusterReconciler) handleError(ctx context.Context, cr *databasev1
 // SetupWithManager sets up the controller with the Manager.
 func (r *MongoClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&databasev1alpha1.MongoCluster{}).
+		For(&databasev1beta1.MongoCluster{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).

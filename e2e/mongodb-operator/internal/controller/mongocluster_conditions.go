@@ -19,7 +19,7 @@ package controller
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	databasev1alpha1 "github.com/example/mongodb-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/mongodb-operator/api/v1beta1"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 	ConditionNetworkSecured = "NetworkSecured"
 )
 
-func setCondition(cr *databasev1alpha1.MongoCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
+func setCondition(cr *databasev1beta1.MongoCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	now := metav1.Now()
 
 	for i, c := range cr.Status.Conditions {
@@ -57,46 +57,46 @@ func setCondition(cr *databasev1alpha1.MongoCluster, conditionType string, statu
 	})
 }
 
-func setAvailableCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func setAvailableCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionAvailable, metav1.ConditionTrue, reason, message)
 }
 
-func setUnavailableCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func setUnavailableCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionAvailable, metav1.ConditionFalse, reason, message)
 }
 
-func setProgressingCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func setProgressingCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionProgressing, metav1.ConditionTrue, reason, message)
 }
 
-func clearProgressingCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func clearProgressingCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionProgressing, metav1.ConditionFalse, reason, message)
 }
 
-func setDegradedCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func setDegradedCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionDegraded, metav1.ConditionTrue, reason, message)
 }
 
-func clearDegradedCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func clearDegradedCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionDegraded, metav1.ConditionFalse, reason, message)
 }
 
-func setBackupReadyCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func setBackupReadyCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionBackupReady, metav1.ConditionTrue, reason, message)
 }
 
-func clearBackupReadyCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func clearBackupReadyCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionBackupReady, metav1.ConditionFalse, reason, message)
 }
 
-func setArbiterReadyCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func setArbiterReadyCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionArbiterReady, metav1.ConditionTrue, reason, message)
 }
 
-func clearArbiterReadyCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func clearArbiterReadyCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionArbiterReady, metav1.ConditionFalse, reason, message)
 }
 
-func setNetworkSecuredCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+func setNetworkSecuredCondition(cr *databasev1beta1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionNetworkSecured, metav1.ConditionTrue, reason, message)
 }

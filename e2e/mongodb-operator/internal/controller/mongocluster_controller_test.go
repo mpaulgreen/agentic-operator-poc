@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	databasev1alpha1 "github.com/example/mongodb-operator/api/v1alpha1"
+	databasev1beta1 "github.com/example/mongodb-operator/api/v1beta1"
 )
 
 var _ = Describe("MongoCluster Controller", func() {
@@ -52,7 +52,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -62,15 +62,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -86,7 +86,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				// Remove finalizer to allow cleanup
 				resource.Finalizers = nil
@@ -99,7 +99,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
 			Expect(err).NotTo(HaveOccurred())
 
-			updated := &databasev1alpha1.MongoCluster{}
+			updated := &databasev1beta1.MongoCluster{}
 			Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
 			Expect(updated.Finalizers).To(ContainElement("database.mongodb.example.com/finalizer"))
 		})
@@ -158,7 +158,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was added
-			updated := &databasev1alpha1.MongoCluster{}
+			updated := &databasev1beta1.MongoCluster{}
 			Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
 			Expect(updated.Finalizers).NotTo(BeEmpty())
 
@@ -170,7 +170,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify finalizer was removed (resource may or may not still exist)
-			deleted := &databasev1alpha1.MongoCluster{}
+			deleted := &databasev1beta1.MongoCluster{}
 			err = k8sClient.Get(ctx, key, deleted)
 			if err == nil {
 				Expect(deleted.Finalizers).To(BeEmpty())
@@ -188,7 +188,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -198,15 +198,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -224,7 +224,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -268,7 +268,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should skip creation when existingSecret is provided", func() {
-			cr.Spec.Auth = &databasev1alpha1.AuthSpec{
+			cr.Spec.Auth = &databasev1beta1.AuthSpec{
 				ExistingSecret: "my-existing-secret",
 			}
 			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
@@ -293,7 +293,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -303,15 +303,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -328,7 +328,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -356,7 +356,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should skip creation when auth.keyFile is provided", func() {
-			cr.Spec.Auth = &databasev1alpha1.AuthSpec{
+			cr.Spec.Auth = &databasev1beta1.AuthSpec{
 				KeyFile: "my-existing-keyfile",
 			}
 			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
@@ -381,7 +381,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -391,15 +391,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -416,7 +416,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -470,7 +470,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -480,15 +480,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -505,7 +505,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -569,7 +569,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -579,15 +579,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -604,7 +604,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -673,7 +673,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -683,15 +683,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -708,7 +708,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -717,7 +717,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should create backup Job when backup.enabled is true", func() {
-			cr.Spec.Backup = &databasev1alpha1.BackupSpec{
+			cr.Spec.Backup = &databasev1beta1.BackupSpec{
 				Enabled:       true,
 				RetentionDays: 7,
 			}
@@ -750,7 +750,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should not create duplicate Job when one is active", func() {
-			cr.Spec.Backup = &databasev1alpha1.BackupSpec{
+			cr.Spec.Backup = &databasev1beta1.BackupSpec{
 				Enabled:       true,
 				RetentionDays: 7,
 			}
@@ -818,7 +818,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -828,15 +828,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -853,7 +853,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -862,7 +862,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should create arbiter Deployment when enabled", func() {
-			cr.Spec.Arbiter = &databasev1alpha1.ArbiterSpec{
+			cr.Spec.Arbiter = &databasev1beta1.ArbiterSpec{
 				Enabled: true,
 			}
 			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
@@ -907,7 +907,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should be idempotent for arbiter", func() {
-			cr.Spec.Arbiter = &databasev1alpha1.ArbiterSpec{
+			cr.Spec.Arbiter = &databasev1beta1.ArbiterSpec{
 				Enabled: true,
 			}
 			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
@@ -928,7 +928,7 @@ var _ = Describe("MongoCluster Controller", func() {
 
 		It("should delete arbiter when disabled", func() {
 			// First enable arbiter and reconcile to create Deployment
-			cr.Spec.Arbiter = &databasev1alpha1.ArbiterSpec{
+			cr.Spec.Arbiter = &databasev1beta1.ArbiterSpec{
 				Enabled: true,
 			}
 			Expect(k8sClient.Update(ctx, cr)).To(Succeed())
@@ -959,15 +959,15 @@ var _ = Describe("MongoCluster Controller", func() {
 	// ============================================================
 	Context("When testing webhook defaulting", func() {
 		It("should default replicas to 3 when 0", func() {
-			cr := &databasev1alpha1.MongoCluster{
+			cr := &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-default-replicas",
 					Namespace: "default",
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 0,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -979,15 +979,15 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should default version to 7.0 when empty", func() {
-			cr := &databasev1alpha1.MongoCluster{
+			cr := &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-default-version",
 					Namespace: "default",
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -999,18 +999,18 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should default backup.retentionDays to 7", func() {
-			cr := &databasev1alpha1.MongoCluster{
+			cr := &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-default-retention",
 					Namespace: "default",
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
-					Backup: &databasev1alpha1.BackupSpec{
+					Backup: &databasev1beta1.BackupSpec{
 						Enabled:       true,
 						RetentionDays: 0,
 					},
@@ -1028,15 +1028,15 @@ var _ = Describe("MongoCluster Controller", func() {
 	// ============================================================
 	Context("When testing webhook validation", func() {
 		It("should reject even replicas", func() {
-			cr := &databasev1alpha1.MongoCluster{
+			cr := &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-even-replicas",
 					Namespace: "default",
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 4,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -1048,18 +1048,18 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should reject auth mutual exclusion", func() {
-			cr := &databasev1alpha1.MongoCluster{
+			cr := &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-auth-mutual",
 					Namespace: "default",
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
-					Auth: &databasev1alpha1.AuthSpec{
+					Auth: &databasev1beta1.AuthSpec{
 						AdminPassword:  "password123",
 						ExistingSecret: "my-secret",
 					},
@@ -1072,29 +1072,29 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should reject storage size reduction on update", func() {
-			oldCR := &databasev1alpha1.MongoCluster{
+			oldCR := &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-storage-reduce",
 					Namespace: "default",
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "20Gi",
 					},
 				},
 			}
 
-			newCR := &databasev1alpha1.MongoCluster{
+			newCR := &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-storage-reduce",
 					Namespace: "default",
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -1103,6 +1103,53 @@ var _ = Describe("MongoCluster Controller", func() {
 			_, err := newCR.ValidateUpdate(oldCR)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("storage size cannot be reduced"))
+		})
+
+		It("should reject sharding.enabled with shards < 1", func() {
+			cr := &databasev1beta1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-sharding-invalid",
+					Namespace: "default",
+				},
+				Spec: databasev1beta1.MongoClusterSpec{
+					Replicas: 3,
+					Version:  "7.0",
+					Storage: databasev1beta1.StorageSpec{
+						Size: "10Gi",
+					},
+					Sharding: &databasev1beta1.ShardingSpec{
+						Enabled: true,
+						Shards:  0,
+					},
+				},
+			}
+
+			_, err := cr.ValidateCreate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("sharding.shards must be at least 1"))
+		})
+
+		It("should allow sharding.enabled with valid shards", func() {
+			cr := &databasev1beta1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-sharding-valid",
+					Namespace: "default",
+				},
+				Spec: databasev1beta1.MongoClusterSpec{
+					Replicas: 3,
+					Version:  "7.0",
+					Storage: databasev1beta1.StorageSpec{
+						Size: "10Gi",
+					},
+					Sharding: &databasev1beta1.ShardingSpec{
+						Enabled: true,
+						Shards:  3,
+					},
+				},
+			}
+
+			_, err := cr.ValidateCreate()
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
@@ -1115,7 +1162,7 @@ var _ = Describe("MongoCluster Controller", func() {
 			name       string
 			namespace  string
 			key        types.NamespacedName
-			cr         *databasev1alpha1.MongoCluster
+			cr         *databasev1beta1.MongoCluster
 			reconciler *MongoClusterReconciler
 		)
 
@@ -1125,15 +1172,15 @@ var _ = Describe("MongoCluster Controller", func() {
 			namespace = "default"
 			key = types.NamespacedName{Name: name, Namespace: namespace}
 
-			cr = &databasev1alpha1.MongoCluster{
+			cr = &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
 					Namespace: namespace,
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Replicas: 3,
 					Version:  "7.0",
-					Storage: databasev1alpha1.StorageSpec{
+					Storage: databasev1beta1.StorageSpec{
 						Size: "10Gi",
 					},
 				},
@@ -1150,7 +1197,7 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &databasev1alpha1.MongoCluster{}
+			resource := &databasev1beta1.MongoCluster{}
 			if err := k8sClient.Get(ctx, key, resource); err == nil {
 				resource.Finalizers = nil
 				_ = k8sClient.Update(ctx, resource)
@@ -1210,11 +1257,11 @@ var _ = Describe("MongoCluster Controller", func() {
 	// ============================================================
 	Context("When testing helper functions", func() {
 		It("should return correct labels with expected keys and values", func() {
-			cr := &databasev1alpha1.MongoCluster{
+			cr := &databasev1beta1.MongoCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "my-mongo",
 				},
-				Spec: databasev1alpha1.MongoClusterSpec{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Version: "7.0",
 				},
 			}
@@ -1230,8 +1277,8 @@ var _ = Describe("MongoCluster Controller", func() {
 		})
 
 		It("should generate correct MongoDB image name", func() {
-			cr := &databasev1alpha1.MongoCluster{
-				Spec: databasev1alpha1.MongoClusterSpec{
+			cr := &databasev1beta1.MongoCluster{
+				Spec: databasev1beta1.MongoClusterSpec{
 					Version: "7.0",
 				},
 			}

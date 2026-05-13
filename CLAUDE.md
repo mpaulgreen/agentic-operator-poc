@@ -214,8 +214,8 @@ All 8 sprints complete. 5 skills (99 files) + 3 subagents built and validated.
 - 3 subagents: operator-reviewer, operator-test-generator, operator-bundle-validator
 - **PostgreSQL Operator** (4 scenarios A-D): **DONE** — 111/111 test conditions pass on OpenShift (both deploy paths)
 - **Redis Operator** (Scenarios A-E): **DONE** — 139/139 test conditions pass on OpenShift (both deploy paths, zero skill modifications)
-- **MongoDB Operator** (Scenarios A-C): **DONE** — 84/84 test conditions pass on OpenShift (both deploy paths, 1 skill fix: Bug #18 in Scenario A, 0 in B-C)
+- **MongoDB Operator** (Scenarios A-D): **DONE** — 107/107 test conditions pass on OpenShift (both deploy paths, 1 skill fix: Bug #18 in Scenario A, 0 in B-D)
 - 18 skill bugs traced and fixed (17 from PostgreSQL, 1 from MongoDB); Redis required zero fixes
-- **334 total E2E test conditions across 3 operators — ALL PASS**
-- Gaps validated: **Job (batch/v1) reconciliation**, conditional Deployment, webhooks for third API group
-- Next: MongoDB Scenarios D-E
+- **357 total E2E test conditions across 3 operators — ALL PASS**
+- Gaps validated: **Job (batch/v1) reconciliation**, conditional Deployment, webhooks for third API group, API versioning for third operand
+- Next: MongoDB Scenario E (different-group CRD)
