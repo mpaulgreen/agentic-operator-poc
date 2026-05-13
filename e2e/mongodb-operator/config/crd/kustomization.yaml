@@ -1,5 +1,6 @@
 resources:
 - bases/database.mongodb.example.com_mongoclusters.yaml
+- bases/backup.mongodb.example.com_mongobackuppolicies.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 #+kubebuilder:scaffold:crdkustomizewebhookpatch

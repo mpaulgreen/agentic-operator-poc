@@ -2066,3 +2066,637 @@ make undeploy                                                    # if deployed w
 | 21 | Sharding descriptors in CSV | D.9 | sharding.* + maxConnections |
 | 22 | No conversion webhook patch (Bug #15) | D.9 | No patch |
 | 23 | Bundle validates | D.9 | No errors |
+
+---
+---
+
+# Scenario E: Different-Group CRD — MongoBackupPolicy (v0.5.0)
+
+Adds a second CRD (`MongoBackupPolicy`) in a **different API group** (`backup.mongodb.example.com`) from `MongoCluster` (`database.mongodb.example.com`). This is the **highest-value scenario** — scaffolding Workflow C (different-group layout) has **never been E2E tested** before. Built using:
+- **Step 1** (Generate): `scaffolding-operator` SKILL (Workflow B, Pattern C — different group) — Created api/backup/v1beta1/, internal/controller/backup/, PROJECT multigroup, aliased imports
+- **Step 2** (Generate): `designing-operator-api` SKILL (Workflow A) — Designed MongoBackupPolicy types
+- **Step 3** (Generate): `implementing-reconciliation` SKILL (Workflow A) — Implemented controller (CronJob + PVC)
+- **Step 4a** (Test): `operator-test-generator` SUBAGENT — Generated tests (10 cases)
+- **Step 4b** (Review): `operator-reviewer` SUBAGENT — Reviewed all changes (0 Critical)
+- **Step 5** (Generate): `bundling-operator` SKILL (Workflow B) — CSV v0.5.0 with 2 owned CRDs from different groups
+- **Step 6** (Validate): `operator-bundle-validator` SUBAGENT — Validated bundle
+
+**Changes**: MongoBackupPolicy CRD in `backup.mongodb.example.com` (different from `database.mongodb.example.com`), separate api/backup/v1beta1/ and internal/controller/backup/ packages, PROJECT `multigroup: true`, aliased imports (`backupv1beta1`, `backupcontroller`), reconcilePolicyCronJob + reconcileBackupPVC, cross-group clusterRef verification, CSV v0.5.0 with 2 owned CRDs from different API groups.
+
+**Key feature**: Multi-group API layout — tests scaffolding Workflow C (different-group), aliased imports, separate controller packages, cross-group RBAC, and two different API groups in one CSV.
+
+**Prerequisites**:
+- Scenario D completed successfully. All Scenario D CRs deleted.
+- cert-manager operator installed (from Scenario C).
+
+## Scenario E Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/mongodb-operator:v0.5.0
+export BUNDLE_IMG=quay.io/mpaulgreen/mongodb-operator-bundle:v0.5.0
+export NAMESPACE=mongodb-operator-system
+
+cd e2e/mongodb-operator
+```
+
+---
+
+## Phase E.1: Build and Deploy v0.5.0
+
+### E.1.1 Build the Operator Image
+
+```bash
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### E.1.2 Deploy the Operator
+
+#### Option A: `make deploy` (Development)
+
+```bash
+make manifests
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/mongodb-operator:v0.5.0|$IMG|g" bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+
+# Refresh CRDs in bundle (both MongoCluster + MongoBackupPolicy)
+make manifests
+cp config/crd/bases/database.mongodb.example.com_mongoclusters.yaml bundle/manifests/
+cp config/crd/bases/backup.mongodb.example.com_mongobackuppolicies.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### E.1.3 Verify Deployment
+
+```bash
+# Operator pod running
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+
+# BOTH CRDs installed (different API groups)
+oc get crd mongoclusters.database.mongodb.example.com && echo "PASS: MongoCluster CRD"
+oc get crd mongobackuppolicies.backup.mongodb.example.com && echo "PASS: MongoBackupPolicy CRD"
+
+# MongoBackupPolicy CRD has expected fields
+oc get crd mongobackuppolicies.backup.mongodb.example.com -o jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+
+# MongoBackupPolicy print columns
+oc get crd mongobackuppolicies.backup.mongodb.example.com -o jsonpath='{.spec.versions[0].additionalPrinterColumns[*].name}' && echo ""
+
+# Controller logs — should show EventSources for BOTH controllers
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=30 | grep -E "Starting EventSource|Starting workers"
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.5.0 image
+- [ ] Both CRDs installed: `mongoclusters.database.mongodb.example.com` and `mongobackuppolicies.backup.mongodb.example.com`
+- [ ] MongoBackupPolicy CRD fields: clusterRef, retentionDays, schedule, storageSize
+- [ ] Print columns: Phase, Cluster, Schedule, Age
+- [ ] Two controllers starting (MongoCluster + MongoBackupPolicy EventSources)
+
+---
+
+## Phase E.2: Existing Features Regression (MongoCluster)
+
+### E.2.1 Create MongoCluster (Parent)
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: database.mongodb.example.com/v1beta1
+kind: MongoCluster
+metadata:
+  name: mongo-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.0"
+  storage:
+    size: 1Gi
+  arbiter:
+    enabled: true
+EOF
+
+sleep 30
+```
+
+### E.2.2 Verify All A+B+C+D MongoCluster Resources Created
+
+```bash
+echo "=== MongoCluster Resources ==="
+oc get secret mongo-test-admin -n $NAMESPACE && echo "PASS: Admin Secret" || echo "FAIL"
+oc get secret mongo-test-keyfile -n $NAMESPACE && echo "PASS: KeyFile Secret" || echo "FAIL"
+oc get configmap mongo-test-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+oc get service mongo-test-headless -n $NAMESPACE && echo "PASS: Headless" || echo "FAIL"
+oc get service mongo-test-client -n $NAMESPACE && echo "PASS: Client" || echo "FAIL"
+oc get statefulset mongo-test -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL"
+oc get deployment mongo-test-arbiter -n $NAMESPACE && echo "PASS: Arbiter" || echo "FAIL"
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy" || echo "FAIL"
+
+echo ""
+echo "=== Status ==="
+oc get mongocluster mongo-test -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All 8 MongoCluster resources created
+- [ ] Status shows Running
+
+---
+
+## Phase E.3: Create MongoBackupPolicy (Different API Group)
+
+### E.3.1 Create MongoBackupPolicy Referencing MongoCluster
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  name: backup-policy
+  namespace: $NAMESPACE
+spec:
+  clusterRef: mongo-test
+  schedule: "0 2 * * *"
+  retentionDays: 30
+  storageSize: 5Gi
+EOF
+
+sleep 15
+```
+
+### E.3.2 Verify MongoBackupPolicy Managed Resources
+
+```bash
+echo "=== MongoBackupPolicy Resources ==="
+oc get cronjob backup-policy-cronjob -n $NAMESPACE && echo "PASS: CronJob" || echo "FAIL"
+oc get pvc backup-policy-storage -n $NAMESPACE && echo "PASS: PVC" || echo "FAIL"
+
+echo ""
+echo "=== Owner References ==="
+oc get cronjob backup-policy-cronjob -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be MongoBackupPolicy)"
+oc get pvc backup-policy-storage -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be MongoBackupPolicy)"
+```
+
+**Expected**:
+- [ ] CronJob `backup-policy-cronjob` created with schedule `0 2 * * *`
+- [ ] PVC `backup-policy-storage` created with 5Gi
+- [ ] Both have ownerReferences pointing to MongoBackupPolicy (NOT MongoCluster)
+
+### E.3.3 Verify CronJob Details
+
+```bash
+echo "=== CronJob ==="
+oc get cronjob backup-policy-cronjob -n $NAMESPACE -o jsonpath='{.spec.schedule}' && echo " schedule (should be 0 2 * * *)"
+oc get cronjob backup-policy-cronjob -n $NAMESPACE -o jsonpath='{.metadata.labels}' | python3 -m json.tool
+```
+
+**Expected**:
+- [ ] Schedule: `0 2 * * *`
+- [ ] Labels include `component: backup-policy` and `part-of: mongo-test`
+
+### E.3.4 Verify PVC Details
+
+```bash
+echo "=== PVC ==="
+oc get pvc backup-policy-storage -n $NAMESPACE -o jsonpath='{.spec.resources.requests.storage}' && echo " storage (should be 5Gi)"
+oc get pvc backup-policy-storage -n $NAMESPACE -o jsonpath='{.spec.accessModes}' && echo " access modes"
+```
+
+**Expected**:
+- [ ] Storage: 5Gi
+- [ ] AccessModes: ReadWriteOnce
+
+### E.3.5 Verify MongoBackupPolicy Status
+
+```bash
+oc get mongobackuppolicy backup-policy -n $NAMESPACE -o wide
+
+echo ""
+oc get mongobackuppolicy backup-policy -n $NAMESPACE -o jsonpath='{.status}' | python3 -m json.tool
+```
+
+**Expected**:
+- [ ] Phase: Active
+- [ ] Print columns: Phase=Active, Cluster=mongo-test, Schedule=0 2 * * *
+- [ ] Condition Available: True
+
+### E.3.6 Verify Finalizer
+
+```bash
+oc get mongobackuppolicy backup-policy -n $NAMESPACE -o jsonpath='{.metadata.finalizers}' && echo ""
+```
+
+**Expected**: `["backup.mongodb.example.com/finalizer"]` (different finalizer domain from MongoCluster)
+
+### E.3.7 Verify Events
+
+```bash
+oc get events -n $NAMESPACE --field-selector involvedObject.name=backup-policy --sort-by='.lastTimestamp'
+```
+
+**Expected**: Events for PVCCreated, CronJobCreated.
+
+---
+
+## Phase E.4: Cross-Group Verification
+
+### E.4.1 Verify Two Different API Groups on Cluster
+
+```bash
+echo "=== API Groups ==="
+oc api-resources | grep -E 'mongocluster|mongobackuppolic'
+```
+
+**Expected**: Two entries from DIFFERENT groups:
+- [ ] `mongoclusters` in `database.mongodb.example.com`
+- [ ] `mongobackuppolicies` in `backup.mongodb.example.com`
+
+### E.4.2 Verify Cross-Group Reference Works
+
+```bash
+# The backup policy references mongo-test (MongoCluster) via clusterRef
+oc get mongobackuppolicy backup-policy -n $NAMESPACE -o jsonpath='{.spec.clusterRef}' && echo " (should be mongo-test)"
+oc get mongocluster mongo-test -n $NAMESPACE -o jsonpath='{.status.phase}' && echo " (parent should be Running)"
+```
+
+**Expected**: Cross-group reference works — MongoBackupPolicy in `backup` group references MongoCluster in `database` group.
+
+### E.4.3 Reject Non-Existent ClusterRef (Cross-Group Validation)
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  name: orphan-policy
+  namespace: $NAMESPACE
+spec:
+  clusterRef: nonexistent-cluster
+  schedule: "0 3 * * *"
+  storageSize: 1Gi
+EOF
+
+sleep 15
+oc get mongobackuppolicy orphan-policy -n $NAMESPACE -o jsonpath='{.status.phase}' && echo " (should be Failed)"
+oc delete mongobackuppolicy orphan-policy -n $NAMESPACE
+```
+
+**Expected**:
+- [ ] Phase: Failed (referenced MongoCluster not found)
+
+---
+
+## Phase E.5: Validation Markers (MongoBackupPolicy)
+
+### E.5.1 Reject Empty ClusterRef
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  name: bad-policy
+  namespace: $NAMESPACE
+spec:
+  clusterRef: ""
+  schedule: "0 2 * * *"
+  storageSize: 5Gi
+EOF
+```
+
+**Expected**: Rejected — clusterRef MinLength=1.
+
+### E.5.2 Reject Empty Schedule
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  name: bad-policy
+  namespace: $NAMESPACE
+spec:
+  clusterRef: mongo-test
+  schedule: ""
+  storageSize: 5Gi
+EOF
+```
+
+**Expected**: Rejected — schedule MinLength=1.
+
+### E.5.3 Reject Invalid StorageSize Pattern
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  name: bad-policy
+  namespace: $NAMESPACE
+spec:
+  clusterRef: mongo-test
+  schedule: "0 2 * * *"
+  storageSize: "100MB"
+EOF
+```
+
+**Expected**: Rejected — storageSize must match `^[0-9]+[KMGT]i$`.
+
+### E.5.4 Reject RetentionDays > 90
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  name: bad-policy
+  namespace: $NAMESPACE
+spec:
+  clusterRef: mongo-test
+  schedule: "0 2 * * *"
+  storageSize: 5Gi
+  retentionDays: 120
+EOF
+```
+
+**Expected**: Rejected — retentionDays max is 90.
+
+### E.5.5 Verify Defaults
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  name: policy-defaults
+  namespace: $NAMESPACE
+spec:
+  clusterRef: mongo-test
+  schedule: "0 4 * * *"
+  storageSize: 1Gi
+EOF
+
+sleep 5
+oc get mongobackuppolicy policy-defaults -n $NAMESPACE -o jsonpath='{.spec.retentionDays}' && echo " retentionDays (should be 30)"
+
+oc delete mongobackuppolicy policy-defaults -n $NAMESPACE
+```
+
+**Expected**: `retentionDays` defaulted to 30.
+
+---
+
+## Phase E.6: Idempotency
+
+### E.6.1 Re-reconcile
+
+```bash
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment -l control-plane=controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "CronJobs: $(oc get cronjob -n $NAMESPACE 2>&1 | grep -c backup-policy-cronjob) (should be 1)"
+echo "PVCs: $(oc get pvc -n $NAMESPACE 2>&1 | grep -c backup-policy-storage) (should be 1)"
+echo "MongoBackupPolicies: $(oc get mongobackuppolicy -n $NAMESPACE 2>&1 | grep -c backup-policy) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each, no duplicates.
+
+---
+
+## Phase E.7: Multi-Instance MongoBackupPolicy
+
+### E.7.1 Create Second Policy for Same Cluster
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  name: hourly-backup
+  namespace: $NAMESPACE
+spec:
+  clusterRef: mongo-test
+  schedule: "0 * * * *"
+  storageSize: 2Gi
+EOF
+
+sleep 15
+oc get mongobackuppolicy -n $NAMESPACE
+oc get cronjob -n $NAMESPACE | grep -E 'backup-policy|hourly-backup'
+```
+
+**Expected**:
+- [ ] 2 independent MongoBackupPolicies
+- [ ] Each has its own CronJob + PVC
+- [ ] Different schedules
+
+### E.7.2 Delete One Policy, Other Unaffected
+
+```bash
+oc delete mongobackuppolicy hourly-backup -n $NAMESPACE
+sleep 10
+
+oc get mongobackuppolicy -n $NAMESPACE
+oc get cronjob -n $NAMESPACE | grep backup-policy
+```
+
+**Expected**: backup-policy still Active, hourly-backup fully cleaned up.
+
+---
+
+## Phase E.8: Delete MongoBackupPolicy — Resource Cleanup
+
+### E.8.1 Delete MongoBackupPolicy and Verify
+
+```bash
+oc delete mongobackuppolicy backup-policy -n $NAMESPACE
+sleep 15
+
+oc get cronjob backup-policy-cronjob -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: CronJob cleaned"
+oc get pvc backup-policy-storage -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: PVC cleaned"
+```
+
+**Expected**:
+- [ ] CronJob garbage collected
+- [ ] PVC garbage collected
+
+---
+
+## Phase E.9: Delete MongoCluster — Verify Independence
+
+### E.9.1 Delete Parent MongoCluster
+
+```bash
+oc delete mongocluster mongo-test -n $NAMESPACE
+sleep 15
+
+oc get mongocluster -n $NAMESPACE
+oc get mongobackuppolicy -n $NAMESPACE
+```
+
+**Expected**:
+- [ ] MongoCluster resources cleaned
+- [ ] MongoBackupPolicy already cleaned (from E.8)
+- [ ] No orphaned resources
+
+---
+
+## Phase E.10: RBAC Verification
+
+### E.10.1 Verify MongoBackupPolicy RBAC
+
+```bash
+oc auth can-i create mongobackuppolicies --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS: Create policies" || echo "FAIL"
+oc auth can-i create cronjobs --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS: Create CronJobs" || echo "FAIL"
+oc auth can-i create persistentvolumeclaims --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS: Create PVCs" || echo "FAIL"
+```
+
+**Expected**: All return "yes".
+
+---
+
+## Phase E.11: OLM Bundle Validation
+
+### E.11.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*mongodb-operator.v' bundle/manifests/mongodb-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `mongodb-operator.v0.5.0`
+- [ ] replaces: `mongodb-operator.v0.4.0`
+- [ ] version: `0.5.0`
+
+### E.11.2 Verify Two Owned CRDs from DIFFERENT Groups
+
+```bash
+grep -E 'kind:.*Mongo|name:.*mongodb' bundle/manifests/mongodb-operator.clusterserviceversion.yaml | grep -E 'kind:|name:.*example.com' | head -10
+```
+
+**Expected**: Both `MongoCluster` (database.mongodb.example.com) and `MongoBackupPolicy` (backup.mongodb.example.com) listed as owned CRDs — **different API groups**.
+
+### E.11.3 Verify Two CRD Manifests in Bundle (Different Groups)
+
+```bash
+ls bundle/manifests/*.mongodb.example.com_*.yaml
+```
+
+**Expected**: Two CRD files from different groups:
+- [ ] `database.mongodb.example.com_mongoclusters.yaml`
+- [ ] `backup.mongodb.example.com_mongobackuppolicies.yaml`
+
+### E.11.4 Verify MongoBackupPolicy Descriptors
+
+```bash
+grep -E 'clusterRef|schedule|retentionDays|storageSize|backupCount|nextBackupTime' bundle/manifests/mongodb-operator.clusterserviceversion.yaml | grep 'path:' | head -10
+```
+
+**Expected**: specDescriptors for clusterRef, schedule, retentionDays, storageSize; statusDescriptors for lastBackupTime, nextBackupTime, backupCount.
+
+### E.11.5 Verify MongoBackupPolicy RBAC in CSV
+
+```bash
+grep -A5 'mongobackuppolicies' bundle/manifests/mongodb-operator.clusterserviceversion.yaml | head -10
+```
+
+**Expected**: `backup.mongodb.example.com/mongobackuppolicies` with CRUD verbs.
+
+### E.11.6 Verify Two alm-examples (Different API Groups)
+
+```bash
+python3 -c "
+import yaml, json
+with open('bundle/manifests/mongodb-operator.clusterserviceversion.yaml') as f:
+    csv = yaml.safe_load(f)
+examples = json.loads(csv['metadata']['annotations']['alm-examples'])
+for ex in examples:
+    print(f\"{ex['apiVersion']} / {ex['kind']}: {ex['metadata']['name']}\")
+print(f'Total: {len(examples)} examples')
+"
+```
+
+**Expected**: 2 examples from different API groups:
+- [ ] `database.mongodb.example.com/v1beta1` / MongoCluster
+- [ ] `backup.mongodb.example.com/v1beta1` / MongoBackupPolicy
+
+### E.11.7 Bundle Validate
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario E Cleanup
+
+```bash
+oc delete mongobackuppolicy --all -n $NAMESPACE 2>/dev/null
+oc delete mongocluster --all -n $NAMESPACE 2>/dev/null
+sleep 15
+
+# Undeploy the operator:
+make undeploy                                                    # if deployed with make deploy
+# operator-sdk cleanup mongodb-operator --namespace $NAMESPACE     # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario E Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | Operator deploys with v0.5.0 image | E.1 | Pod Running |
+| 2 | Both CRDs installed (different API groups) | E.1 | database + backup groups |
+| 3 | MongoBackupPolicy CRD has expected fields | E.1 | clusterRef, schedule, retentionDays, storageSize |
+| 4 | MongoBackupPolicy print columns | E.1 | Phase, Cluster, Schedule, Age |
+| 5 | Two controllers starting | E.1 | MongoCluster + MongoBackupPolicy EventSources |
+| 6 | MongoCluster regression — all 8 resources | E.2 | All created, Running |
+| 7 | MongoBackupPolicy creates CronJob | E.3 | schedule=0 2 * * *, ownerRef=MongoBackupPolicy |
+| 8 | MongoBackupPolicy creates PVC | E.3 | 5Gi, ReadWriteOnce, ownerRef=MongoBackupPolicy |
+| 9 | CronJob labels include component=backup-policy | E.3 | Labels correct |
+| 10 | MongoBackupPolicy status: Active, Available=True | E.3 | Phase + condition |
+| 11 | Finalizer: backup.mongodb.example.com/finalizer | E.3 | Different domain from MongoCluster |
+| 12 | Events: PVCCreated, CronJobCreated | E.3 | 2 events |
+| 13 | Two different API groups on cluster | E.4 | database + backup |
+| 14 | Cross-group clusterRef works | E.4 | backup→database reference |
+| 15 | Non-existent clusterRef → Failed | E.4 | Cross-group validation |
+| 16 | Reject empty clusterRef | E.5 | Validation error |
+| 17 | Reject empty schedule | E.5 | Validation error |
+| 18 | Reject invalid storageSize pattern | E.5 | Validation error |
+| 19 | Reject retentionDays > 90 | E.5 | Validation error |
+| 20 | retentionDays defaults to 30 | E.5 | Default applied |
+| 21 | Idempotent — no duplicate resources | E.6 | Exactly 1 each |
+| 22 | Multiple policies per cluster independent | E.7 | No cross-contamination |
+| 23 | Deleting one policy doesn't affect others | E.7 | Other still Active |
+| 24 | MongoBackupPolicy deletion cleans CronJob + PVC | E.8 | Both GC'd |
+| 25 | MongoCluster deletion independent | E.9 | Cluster resources cleaned |
+| 26 | MongoBackupPolicy RBAC works (CronJobs, PVCs) | E.10 | can-i returns yes |
+| 27 | CSV version 0.5.0 with replaces | E.11 | Correct upgrade path |
+| 28 | Two owned CRDs from DIFFERENT groups | E.11 | database + backup |
+| 29 | Two CRD manifests from different groups | E.11 | Both YAML files |
+| 30 | MongoBackupPolicy descriptors in CSV | E.11 | spec + status descriptors |
+| 31 | MongoBackupPolicy RBAC in CSV | E.11 | backup.mongodb.example.com |
+| 32 | Two alm-examples from different API groups | E.11 | database + backup |
+| 33 | Bundle validates | E.11 | No errors |

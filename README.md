@@ -60,7 +60,7 @@ agentic-operator-poc/
 ├── e2e/                         # E2E scenario tests (by operator category)
 │   ├── postgres-operator/       # PostgreSQL operator (Scenarios A-D, v0.1.0→v0.4.0)
 │   ├── redis-operator/          # Redis operator (Scenarios A-E, v0.1.0→v0.5.0)
-│   ├── mongodb-operator/        # MongoDB operator (Scenarios A-D, v0.1.0→v0.4.0)
+│   ├── mongodb-operator/        # MongoDB operator (Scenarios A-E, v0.1.0→v0.5.0)
 │   └── docs/
 │       └── statefulsets/
 │           ├── postgres-prompts.md         # Scenario prompts + acceptance criteria
@@ -68,7 +68,7 @@ agentic-operator-poc/
 │           ├── redis-prompts.md            # Redis scenario prompts
 │           ├── redis-e2e-validation.md     # Redis OpenShift validation guide (139 tests)
 │           ├── mongodb-prompts.md          # MongoDB scenario prompts
-│           └── mongodb-e2e-validation.md   # MongoDB OpenShift validation guide (107 tests)
+│           └── mongodb-e2e-validation.md   # MongoDB OpenShift validation guide (150 tests)
 ├── .claude/
 │   ├── agents/                  # Subagent definitions
 │   │   ├── operator-reviewer.md

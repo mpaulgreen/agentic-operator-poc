@@ -25,6 +25,23 @@ metadata:
               "retentionDays": 7
             }
           }
+        },
+        {
+          "apiVersion": "backup.mongodb.example.com/v1beta1",
+          "kind": "MongoBackupPolicy",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "mongodb-operator"
+            },
+            "name": "mongobackuppolicy-sample"
+          },
+          "spec": {
+            "clusterRef": "mongocluster-sample",
+            "schedule": "0 2 * * *",
+            "retentionDays": 30,
+            "storageSize": "10Gi"
+          }
         }
       ]
     capabilities: Basic Install
@@ -34,7 +51,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/mongodb-operator
-  name: mongodb-operator.v0.4.0
+  name: mongodb-operator.v0.5.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -128,6 +145,45 @@ spec:
       - path: shardingEnabled
         displayName: Sharding Enabled
         description: Whether sharding is currently active
+    - description: MongoBackupPolicy is the Schema for the mongobackuppolicies API
+      displayName: Mongo Backup Policy
+      kind: MongoBackupPolicy
+      name: mongobackuppolicies.backup.mongodb.example.com
+      version: v1beta1
+      resources:
+      - kind: CronJob
+        version: v1
+      - kind: PersistentVolumeClaim
+        version: v1
+      specDescriptors:
+      - path: clusterRef
+        displayName: Cluster Reference
+        description: Name of the MongoCluster to back up
+      - path: schedule
+        displayName: Schedule
+        description: Cron expression for backup frequency
+      - path: retentionDays
+        displayName: Retention Days
+        description: Number of days to retain backups
+      - path: storageSize
+        displayName: Storage Size
+        description: PVC size for storing backups
+      statusDescriptors:
+      - path: phase
+        displayName: Phase
+        description: Current lifecycle phase
+      - path: conditions
+        displayName: Conditions
+        description: Latest available observations
+      - path: lastBackupTime
+        displayName: Last Backup Time
+        description: When the last backup completed
+      - path: nextBackupTime
+        displayName: Next Backup Time
+        description: Next scheduled backup time
+      - path: backupCount
+        displayName: Backup Count
+        description: Total number of completed backups
   description: |
     ## Overview
     The MongoDB Operator manages MongoCluster resources on OpenShift.
@@ -135,11 +191,11 @@ spec:
     MongoDB replica sets using StatefulSets, Services, Secrets,
     ConfigMaps, backup Jobs, and Arbiter Deployments.
 
-    ## v0.4.0 — API Versioning + Sharding Config
-    - Promoted API to v1beta1 (storage version)
-    - Added ShardingSpec (enabled, shards, configServerReplicas)
-    - Added maxConnections configuration
-    - Maturity: alpha → beta
+    ## v0.5.0 — Multi-CRD: MongoBackupPolicy
+    - Added MongoBackupPolicy CRD in backup.mongodb.example.com group
+    - Scheduled backups via CronJob with PVC storage
+    - Cross-group reference to MongoCluster via clusterRef
+    - Different API group layout (scaffolding Workflow C)
   displayName: MongoDB Operator
   icon:
   - base64data: ""
@@ -265,6 +321,56 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - backup.mongodb.example.com
+          resources:
+          - mongobackuppolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - backup.mongodb.example.com
+          resources:
+          - mongobackuppolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - backup.mongodb.example.com
+          resources:
+          - mongobackuppolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - batch
+          resources:
+          - cronjobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         serviceAccountName: mongodb-operator-controller-manager
       deployments:
       - label:
@@ -293,7 +399,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/mongodb-operator:v0.4.0
+                image: quay.io/mpaulgreen/mongodb-operator:v0.5.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -385,8 +491,8 @@ spec:
   provider:
     name: Example
     url: https://example.com
-  replaces: mongodb-operator.v0.3.0
-  version: 0.4.0
+  replaces: mongodb-operator.v0.4.0
+  version: 0.5.0
   webhookdefinitions:
   - admissionReviewVersions:
     - v1

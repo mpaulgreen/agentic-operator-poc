@@ -34,8 +34,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	databasev1alpha1 "github.com/example/mongodb-operator/api/v1alpha1"
+	backupv1beta1 "github.com/example/mongodb-operator/api/backup/v1beta1"
 	databasev1beta1 "github.com/example/mongodb-operator/api/v1beta1"
 	"github.com/example/mongodb-operator/internal/controller"
+	backupcontroller "github.com/example/mongodb-operator/internal/controller/backup"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -49,6 +51,7 @@ func init() {
 
 	utilruntime.Must(databasev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(databasev1beta1.AddToScheme(scheme))
+	utilruntime.Must(backupv1beta1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -112,6 +115,14 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor("mongodb-operator"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MongoCluster")
+		os.Exit(1)
+	}
+	if err = (&backupcontroller.MongoBackupPolicyReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("mongodb-operator"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MongoBackupPolicy")
 		os.Exit(1)
 	}
 	// Only register v1beta1 webhook — it is the storage version and a superset of v1alpha1.

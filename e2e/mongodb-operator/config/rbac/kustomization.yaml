@@ -8,3 +8,5 @@ resources:
 - metrics_service.yaml
 - mongocluster_editor_role.yaml
 - mongocluster_viewer_role.yaml
+- backup_mongobackuppolicy_editor_role.yaml
+- backup_mongobackuppolicy_viewer_role.yaml

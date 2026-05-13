@@ -1,3 +1,4 @@
 resources:
 - database_v1alpha1_mongocluster.yaml
+- backup_v1beta1_mongobackuppolicy.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

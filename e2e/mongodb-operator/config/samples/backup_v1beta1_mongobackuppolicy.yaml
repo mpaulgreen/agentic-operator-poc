@@ -1,0 +1,12 @@
+apiVersion: backup.mongodb.example.com/v1beta1
+kind: MongoBackupPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: mongodb-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mongobackuppolicy-sample
+spec:
+  clusterRef: mongocluster-sample
+  schedule: "0 2 * * *"
+  retentionDays: 30
+  storageSize: 10Gi

@@ -1,4 +1,5 @@
 domain: mongodb.example.com
+multigroup: true
 layout:
 - go.kubebuilder.io/v4
 plugins:
@@ -16,4 +17,13 @@ resources:
   kind: MongoCluster
   path: github.com/example/mongodb-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: mongodb.example.com
+  group: backup
+  kind: MongoBackupPolicy
+  path: github.com/example/mongodb-operator/api/backup/v1beta1
+  version: v1beta1
 version: "3"
