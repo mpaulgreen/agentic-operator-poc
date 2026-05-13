@@ -28,6 +28,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -950,6 +951,257 @@ var _ = Describe("MongoCluster Controller", func() {
 			err := k8sClient.Get(ctx, depKey, deployment)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
+	})
+
+	// ============================================================
+	// Webhook Tests: Defaulting
+	// ============================================================
+	Context("When testing webhook defaulting", func() {
+		It("should default replicas to 3 when 0", func() {
+			cr := &databasev1alpha1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-default-replicas",
+					Namespace: "default",
+				},
+				Spec: databasev1alpha1.MongoClusterSpec{
+					Replicas: 0,
+					Version:  "7.0",
+					Storage: databasev1alpha1.StorageSpec{
+						Size: "10Gi",
+					},
+				},
+			}
+
+			cr.Default()
+
+			Expect(cr.Spec.Replicas).To(Equal(int32(3)))
+		})
+
+		It("should default version to 7.0 when empty", func() {
+			cr := &databasev1alpha1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-default-version",
+					Namespace: "default",
+				},
+				Spec: databasev1alpha1.MongoClusterSpec{
+					Replicas: 3,
+					Version:  "",
+					Storage: databasev1alpha1.StorageSpec{
+						Size: "10Gi",
+					},
+				},
+			}
+
+			cr.Default()
+
+			Expect(cr.Spec.Version).To(Equal("7.0"))
+		})
+
+		It("should default backup.retentionDays to 7", func() {
+			cr := &databasev1alpha1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-default-retention",
+					Namespace: "default",
+				},
+				Spec: databasev1alpha1.MongoClusterSpec{
+					Replicas: 3,
+					Version:  "7.0",
+					Storage: databasev1alpha1.StorageSpec{
+						Size: "10Gi",
+					},
+					Backup: &databasev1alpha1.BackupSpec{
+						Enabled:       true,
+						RetentionDays: 0,
+					},
+				},
+			}
+
+			cr.Default()
+
+			Expect(cr.Spec.Backup.RetentionDays).To(Equal(int32(7)))
+		})
+	})
+
+	// ============================================================
+	// Webhook Tests: Validation
+	// ============================================================
+	Context("When testing webhook validation", func() {
+		It("should reject even replicas", func() {
+			cr := &databasev1alpha1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-even-replicas",
+					Namespace: "default",
+				},
+				Spec: databasev1alpha1.MongoClusterSpec{
+					Replicas: 4,
+					Version:  "7.0",
+					Storage: databasev1alpha1.StorageSpec{
+						Size: "10Gi",
+					},
+				},
+			}
+
+			_, err := cr.ValidateCreate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("replicas must be odd"))
+		})
+
+		It("should reject auth mutual exclusion", func() {
+			cr := &databasev1alpha1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-auth-mutual",
+					Namespace: "default",
+				},
+				Spec: databasev1alpha1.MongoClusterSpec{
+					Replicas: 3,
+					Version:  "7.0",
+					Storage: databasev1alpha1.StorageSpec{
+						Size: "10Gi",
+					},
+					Auth: &databasev1alpha1.AuthSpec{
+						AdminPassword:  "password123",
+						ExistingSecret: "my-secret",
+					},
+				},
+			}
+
+			_, err := cr.ValidateCreate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("mutually exclusive"))
+		})
+
+		It("should reject storage size reduction on update", func() {
+			oldCR := &databasev1alpha1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-storage-reduce",
+					Namespace: "default",
+				},
+				Spec: databasev1alpha1.MongoClusterSpec{
+					Replicas: 3,
+					Version:  "7.0",
+					Storage: databasev1alpha1.StorageSpec{
+						Size: "20Gi",
+					},
+				},
+			}
+
+			newCR := &databasev1alpha1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-storage-reduce",
+					Namespace: "default",
+				},
+				Spec: databasev1alpha1.MongoClusterSpec{
+					Replicas: 3,
+					Version:  "7.0",
+					Storage: databasev1alpha1.StorageSpec{
+						Size: "10Gi",
+					},
+				},
+			}
+
+			_, err := newCR.ValidateUpdate(oldCR)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("storage size cannot be reduced"))
+		})
+	})
+
+	// ============================================================
+	// Per-Method Tests: reconcileNetworkPolicy
+	// ============================================================
+	Context("When reconciling NetworkPolicy", func() {
+		var (
+			ctx        context.Context
+			name       string
+			namespace  string
+			key        types.NamespacedName
+			cr         *databasev1alpha1.MongoCluster
+			reconciler *MongoClusterReconciler
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			name = fmt.Sprintf("test-%d", time.Now().UnixNano())
+			namespace = "default"
+			key = types.NamespacedName{Name: name, Namespace: namespace}
+
+			cr = &databasev1alpha1.MongoCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+				},
+				Spec: databasev1alpha1.MongoClusterSpec{
+					Replicas: 3,
+					Version:  "7.0",
+					Storage: databasev1alpha1.StorageSpec{
+						Size: "10Gi",
+					},
+				},
+			}
+
+			reconciler = &MongoClusterReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(100),
+			}
+
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, key, cr)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			resource := &databasev1alpha1.MongoCluster{}
+			if err := k8sClient.Get(ctx, key, resource); err == nil {
+				resource.Finalizers = nil
+				_ = k8sClient.Update(ctx, resource)
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
+		})
+
+		It("should create NetworkPolicy when absent", func() {
+			Expect(reconciler.reconcileNetworkPolicy(ctx, cr)).To(Succeed())
+
+			np := &networkingv1.NetworkPolicy{}
+			npKey := types.NamespacedName{Name: fmt.Sprintf("%s-network-policy", name), Namespace: namespace}
+			Expect(k8sClient.Get(ctx, npKey, np)).To(Succeed())
+
+			// Verify policy types
+			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeIngress))
+			Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
+
+			// Verify ingress allows port 27017
+			Expect(np.Spec.Ingress).To(HaveLen(1))
+			Expect(np.Spec.Ingress[0].Ports).To(HaveLen(1))
+			Expect(np.Spec.Ingress[0].Ports[0].Port.IntValue()).To(Equal(27017))
+
+			// Verify egress allows DNS (port 53)
+			Expect(np.Spec.Egress).To(HaveLen(1))
+			Expect(np.Spec.Egress[0].Ports).To(HaveLen(2))
+
+			// Verify pod selector matches labels
+			Expect(np.Spec.PodSelector.MatchLabels).To(HaveKeyWithValue("app.kubernetes.io/instance", name))
+
+			// Verify owner reference
+			Expect(np.OwnerReferences).To(HaveLen(1))
+			Expect(np.OwnerReferences[0].Name).To(Equal(name))
+
+			// Verify labels
+			Expect(np.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "mongodb"))
+			Expect(np.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "mongodb-operator"))
+		})
+
+		It("should not recreate existing NetworkPolicy (idempotent)", func() {
+			Expect(reconciler.reconcileNetworkPolicy(ctx, cr)).To(Succeed())
+
+			np := &networkingv1.NetworkPolicy{}
+			npKey := types.NamespacedName{Name: fmt.Sprintf("%s-network-policy", name), Namespace: namespace}
+			Expect(k8sClient.Get(ctx, npKey, np)).To(Succeed())
+			originalVersion := np.ResourceVersion
+
+			// Reconcile again
+			Expect(reconciler.reconcileNetworkPolicy(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, npKey, np)).To(Succeed())
+			Expect(np.ResourceVersion).To(Equal(originalVersion))
 		})
 	})
 

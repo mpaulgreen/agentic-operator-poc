@@ -24,8 +24,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -55,6 +57,7 @@ type MongoClusterReconciler struct {
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *MongoClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -117,6 +120,10 @@ func (r *MongoClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return r.handleError(ctx, cr, "ArbiterReconcileFailed", err)
 	}
 
+	if err := r.reconcileNetworkPolicy(ctx, cr); err != nil {
+		return r.handleError(ctx, cr, "NetworkPolicyReconcileFailed", err)
+	}
+
 	if err := r.reconcileBackupJob(ctx, cr); err != nil {
 		return r.handleError(ctx, cr, "BackupJobReconcileFailed", err)
 	}
@@ -139,6 +146,9 @@ func (r *MongoClusterReconciler) handleDeletion(ctx context.Context, cr *databas
 		r.Recorder.Event(cr, corev1.EventTypeNormal, "CleanupStarted",
 			fmt.Sprintf("Cleaning up resources for MongoCluster %s", cr.Name))
 
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr); err != nil {
+			return ctrl.Result{}, err
+		}
 		controllerutil.RemoveFinalizer(cr, mongoClusterFinalizer)
 		if err := r.Update(ctx, cr); err != nil {
 			return ctrl.Result{}, err
@@ -173,6 +183,7 @@ func (r *MongoClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&networkingv1.NetworkPolicy{}).
 		Owns(&batchv1.Job{}).
 		Complete(r)
 }

@@ -1120,3 +1120,511 @@ sleep 15
 | 16 | Arbiter descriptors in CSV | B.8 | arbiter.* fields present |
 | 17 | Deployment RBAC in CSV | B.8 | apps/deployments |
 | 18 | Bundle validates | B.8 | No errors |
+
+---
+---
+
+# Scenario C: Webhooks + Network Security (v0.3.0)
+
+Adds defaulting/validating admission webhooks + NetworkPolicy to the MongoDB operator. Built using:
+- **Step 1** (Generate): `designing-operator-api` SKILL (Workflow C) — Added webhook handler + 9 config files
+- **Step 2** (Generate): `implementing-reconciliation` SKILL (Workflow B) — Added reconcileNetworkPolicy
+- **Step 3a** (Test): `operator-test-generator` SUBAGENT (Workflow B) — Added NP + webhook tests (8 cases)
+- **Step 3b** (Review): `operator-reviewer` SUBAGENT — Reviewed modified code (0 Critical after fix)
+- **Step 4** (Generate): `bundling-operator` SKILL (Workflow B) — Updated CSV v0.2.0 → v0.3.0
+- **Step 5** (Validate): `operator-bundle-validator` SUBAGENT — Validated updated bundle
+
+**Changes**: Webhook handler (Default + ValidateCreate/Update/Delete), 9 webhook config files with kustomize replacements for cert-manager TLS (Bug #14 regression), reconcileNetworkPolicy (port 27017 ingress + DNS/replication egress), NetworkSecured condition, CSV v0.3.0 with replaces + webhookdefinitions.
+
+**Prerequisites**:
+- Scenario B completed successfully. All Scenario B CRs deleted.
+- **cert-manager operator** installed on OpenShift.
+
+## Scenario C Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/mongodb-operator:v0.3.0
+export BUNDLE_IMG=quay.io/mpaulgreen/mongodb-operator-bundle:v0.3.0
+export NAMESPACE=mongodb-operator-system
+
+cd e2e/mongodb-operator
+```
+
+---
+
+## Phase C.1: Build and Deploy v0.3.0
+
+### C.1.1 Verify cert-manager is Running
+
+```bash
+oc get pods -n cert-manager 2>/dev/null || oc get pods -n openshift-cert-manager 2>/dev/null || echo "cert-manager not found — install it first"
+```
+
+### C.1.2 Build the Operator Image
+
+```bash
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### C.1.3 Deploy the Operator
+
+#### Option A: `make deploy` (Development)
+
+```bash
+make manifests
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/mongodb-operator:v0.3.0|$IMG|g" bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+
+# Refresh CRD in bundle
+make manifests
+cp config/crd/bases/database.mongodb.example.com_mongoclusters.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### C.1.4 Verify Deployment
+
+```bash
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+
+# Webhook service and certificate
+oc get service -n $NAMESPACE | grep webhook
+oc get certificate -n $NAMESPACE 2>/dev/null || echo "Check cert-manager namespace"
+
+# Webhook configurations registered
+oc get mutatingwebhookconfiguration | grep mongodb
+oc get validatingwebhookconfiguration | grep mongodb
+
+# Controller logs — should show 8 EventSources (added NetworkPolicy)
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=20 | grep -E "Starting EventSource|Starting workers"
+
+# CRD has arbiter field from Scenario B
+oc get crd mongoclusters.database.mongodb.example.com -o jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.3.0 image
+- [ ] Webhook Service exists
+- [ ] MutatingWebhookConfiguration and ValidatingWebhookConfiguration registered
+- [ ] Controller watching 8 EventSources (added NetworkPolicy)
+- [ ] CRD has all fields: arbiter, auth, backup, replicas, resources, storage, version
+
+---
+
+## Phase C.2: Existing Features Regression
+
+### C.2.1 Create CR with Arbiter
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  name: mongo-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.0"
+  storage:
+    size: 1Gi
+  arbiter:
+    enabled: true
+EOF
+
+sleep 30
+```
+
+### C.2.2 Verify All A+B Resources Created + NetworkPolicy
+
+```bash
+echo "=== Managed Resources ==="
+oc get secret mongo-test-admin -n $NAMESPACE && echo "PASS: Admin Secret" || echo "FAIL"
+oc get secret mongo-test-keyfile -n $NAMESPACE && echo "PASS: KeyFile Secret" || echo "FAIL"
+oc get configmap mongo-test-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+oc get service mongo-test-headless -n $NAMESPACE && echo "PASS: Headless" || echo "FAIL"
+oc get service mongo-test-client -n $NAMESPACE && echo "PASS: Client" || echo "FAIL"
+oc get statefulset mongo-test -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL"
+oc get deployment mongo-test-arbiter -n $NAMESPACE && echo "PASS: Arbiter" || echo "FAIL"
+
+echo ""
+echo "=== New: NetworkPolicy ==="
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy" || echo "FAIL"
+
+echo ""
+echo "=== Status ==="
+oc get mongocluster mongo-test -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All 7 existing resources created (Secret×2, ConfigMap, Service×2, StatefulSet, Arbiter Deployment)
+- [ ] NetworkPolicy `mongo-test-network-policy` created (new — always created)
+- [ ] Status shows Running
+
+---
+
+## Phase C.3: Webhook Defaulting
+
+### C.3.1 Create CR with Missing Fields
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  name: mongo-defaults
+  namespace: $NAMESPACE
+spec:
+  storage:
+    size: 1Gi
+EOF
+
+sleep 5
+
+echo "=== Defaulted Fields ==="
+oc get mongocluster mongo-defaults -n $NAMESPACE -o jsonpath='{.spec.replicas}' && echo " replicas (should be 3)"
+oc get mongocluster mongo-defaults -n $NAMESPACE -o jsonpath='{.spec.version}' && echo " version (should be 7.0)"
+```
+
+**Expected**:
+- [ ] `replicas` defaulted to 3
+- [ ] `version` defaulted to "7.0"
+
+### C.3.2 Create CR with Backup Enabled but No RetentionDays
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  name: mongo-backup-default
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.0"
+  storage:
+    size: 1Gi
+  backup:
+    enabled: true
+EOF
+
+sleep 5
+
+oc get mongocluster mongo-backup-default -n $NAMESPACE -o jsonpath='{.spec.backup.retentionDays}' && echo " retentionDays (should be 7)"
+```
+
+**Expected**:
+- [ ] `backup.retentionDays` defaulted to 7
+
+### C.3.3 Cleanup Defaulting Test CRs
+
+```bash
+oc delete mongocluster mongo-defaults mongo-backup-default -n $NAMESPACE
+sleep 10
+```
+
+---
+
+## Phase C.4: Webhook Validation (Create)
+
+### C.4.1 Reject Even Replicas (Election Quorum)
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  name: mongo-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 4
+  version: "7.0"
+  storage:
+    size: 1Gi
+EOF
+```
+
+**Expected**: Rejected — replicas must be odd for replica set elections.
+
+### C.4.2 Reject Both auth.adminPassword and auth.existingSecret
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  name: mongo-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.0"
+  storage:
+    size: 1Gi
+  auth:
+    adminPassword: "mypassword"
+    existingSecret: "my-secret"
+EOF
+```
+
+**Expected**: Rejected — auth.adminPassword and auth.existingSecret are mutually exclusive.
+
+### C.4.3 Reject Replicas Less Than 1
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  name: mongo-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 0
+  version: "7.0"
+  storage:
+    size: 1Gi
+EOF
+```
+
+**Expected**: Rejected — replicas must be >= 1.
+
+### C.4.4 Reject RetentionDays Greater Than 30
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: database.mongodb.example.com/v1alpha1
+kind: MongoCluster
+metadata:
+  name: mongo-bad
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "7.0"
+  storage:
+    size: 1Gi
+  backup:
+    enabled: true
+    retentionDays: 60
+EOF
+```
+
+**Expected**: Rejected — backup.retentionDays must be at most 30.
+
+---
+
+## Phase C.5: Webhook Validation (Update)
+
+### C.5.1 Reject Storage Size Reduction
+
+```bash
+oc get mongocluster mongo-test -n $NAMESPACE -o jsonpath='{.spec.storage.size}' && echo " (current size)"
+
+oc patch mongocluster mongo-test -n $NAMESPACE --type merge -p '{"spec":{"storage":{"size":"500Mi"}}}' 2>&1
+```
+
+**Expected**: Rejected — storage size cannot be reduced.
+
+### C.5.2 Allow Storage Size Increase
+
+```bash
+oc patch mongocluster mongo-test -n $NAMESPACE --type merge -p '{"spec":{"storage":{"size":"2Gi"}}}'
+```
+
+**Expected**: Accepted.
+
+---
+
+## Phase C.6: NetworkPolicy
+
+### C.6.1 Verify NetworkPolicy Details
+
+```bash
+echo "=== NetworkPolicy ==="
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE
+
+echo ""
+echo "=== Ingress Rules ==="
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE -o jsonpath='{.spec.ingress}' | python3 -m json.tool
+
+echo ""
+echo "=== Egress Rules ==="
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE -o jsonpath='{.spec.egress}' | python3 -m json.tool
+
+echo ""
+echo "=== Owner Reference ==="
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be MongoCluster)"
+```
+
+**Expected**:
+- [ ] Ingress allows port 27017 from same namespace
+- [ ] Egress allows DNS (port 53 TCP/UDP) + MongoDB replication (port 27017)
+- [ ] Owner reference → MongoCluster
+
+### C.6.2 Verify NetworkSecured Condition
+
+```bash
+oc get mongocluster mongo-test -n $NAMESPACE -o jsonpath='{.status.conditions}' | python3 -c "
+import json, sys
+conditions = json.load(sys.stdin)
+for c in conditions:
+    if c['type'] == 'NetworkSecured':
+        print(f\"NetworkSecured: {c['status']} (reason: {c['reason']})\")
+"
+```
+
+**Expected**: `NetworkSecured: True`
+
+---
+
+## Phase C.7: Idempotency
+
+### C.7.1 Re-reconcile
+
+```bash
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment -l control-plane=controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "NetworkPolicies: $(oc get networkpolicy -n $NAMESPACE 2>&1 | grep -c mongo-test) (should be 1)"
+echo "Arbiter Deployments: $(oc get deployment -n $NAMESPACE 2>&1 | grep -c mongo-test-arbiter) (should be 1)"
+echo "StatefulSets: $(oc get statefulset -n $NAMESPACE 2>&1 | grep -c mongo-test) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each, no duplicates.
+
+---
+
+## Phase C.8: Delete CR
+
+### C.8.1 Delete and Verify All Resources Cleaned
+
+```bash
+oc delete mongocluster mongo-test -n $NAMESPACE
+sleep 15
+
+oc get secret mongo-test-admin -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Admin Secret"
+oc get secret mongo-test-keyfile -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: KeyFile Secret"
+oc get configmap mongo-test-config -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: ConfigMap"
+oc get service mongo-test-headless -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Headless"
+oc get service mongo-test-client -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Client"
+oc get statefulset mongo-test -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: StatefulSet"
+oc get deployment mongo-test-arbiter -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Arbiter"
+oc get networkpolicy mongo-test-network-policy -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: NetworkPolicy"
+```
+
+**Expected**:
+- [ ] All 8 managed resources garbage collected (including NetworkPolicy)
+
+---
+
+## Phase C.9: RBAC Verification
+
+### C.9.1 Verify NetworkPolicy RBAC
+
+```bash
+oc auth can-i create networkpolicies --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS" || echo "FAIL"
+oc auth can-i delete networkpolicies --as=system:serviceaccount:$NAMESPACE:mongodb-operator-controller-manager -n $NAMESPACE && echo "PASS" || echo "FAIL"
+```
+
+**Expected**: Both return "yes".
+
+---
+
+## Phase C.10: OLM Bundle Validation
+
+### C.10.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*mongodb-operator.v' bundle/manifests/mongodb-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `mongodb-operator.v0.3.0`
+- [ ] replaces: `mongodb-operator.v0.2.0`
+- [ ] version: `0.3.0`
+
+### C.10.2 Verify Webhook Definitions
+
+```bash
+grep 'webhookPath' bundle/manifests/mongodb-operator.clusterserviceversion.yaml
+```
+
+**Expected**: Mutating + validating webhook paths for mongocluster.
+
+### C.10.3 Verify NetworkPolicy RBAC in CSV
+
+```bash
+grep -A3 'networkpolicies' bundle/manifests/mongodb-operator.clusterserviceversion.yaml | head -5
+```
+
+**Expected**: `networking.k8s.io/networkpolicies` with CRUD verbs.
+
+### C.10.4 Bundle Validate
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario C Cleanup
+
+```bash
+oc delete mongocluster --all -n $NAMESPACE
+sleep 15
+
+# If NOT continuing to Scenario D, undeploy:
+# make undeploy                                                    # if deployed with make deploy
+# operator-sdk cleanup mongodb-operator --namespace $NAMESPACE     # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario C Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | cert-manager running | C.1 | Pods Running |
+| 2 | Operator deploys with v0.3.0 image | C.1 | Pod Running |
+| 3 | Webhook Service exists | C.1 | Service on port 443 |
+| 4 | Webhook configurations registered | C.1 | Mutating + Validating |
+| 5 | All A+B resources still work + NetworkPolicy | C.2 | 7 + NP created |
+| 6 | Replicas defaulted to 3 when 0 | C.3 | Webhook defaulting |
+| 7 | Version defaulted to "7.0" when empty | C.3 | Webhook defaulting |
+| 8 | backup.retentionDays defaulted to 7 | C.3 | Webhook defaulting |
+| 9 | Reject even replicas | C.4 | Election quorum validation |
+| 10 | Reject auth mutual exclusion | C.4 | Mutual exclusivity |
+| 11 | Reject replicas < 1 | C.4 | Validation |
+| 12 | Reject retentionDays > 30 | C.4 | Validation |
+| 13 | Reject storage size reduction | C.5 | Update validation |
+| 14 | Allow storage size increase | C.5 | Accepted |
+| 15 | NetworkPolicy allows port 27017 ingress | C.6 | Correct ingress |
+| 16 | NetworkPolicy has DNS + replication egress | C.6 | Correct egress |
+| 17 | NetworkPolicy owner ref → MongoCluster | C.6 | Correct |
+| 18 | NetworkSecured condition True | C.6 | Condition set |
+| 19 | Idempotent — no duplicate NP | C.7 | Exactly 1 |
+| 20 | All 8 resources cleaned on delete | C.8 | Including NP |
+| 21 | NetworkPolicy RBAC works | C.9 | can-i returns yes |
+| 22 | CSV version 0.3.0 with replaces | C.10 | Correct upgrade |
+| 23 | Webhook definitions in CSV | C.10 | Both paths |
+| 24 | NP RBAC in CSV | C.10 | networking.k8s.io |
+| 25 | Bundle validates | C.10 | No errors |

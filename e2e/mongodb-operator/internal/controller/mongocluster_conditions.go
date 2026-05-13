@@ -27,7 +27,8 @@ const (
 	ConditionProgressing = "Progressing"
 	ConditionDegraded    = "Degraded"
 	ConditionBackupReady  = "BackupReady"
-	ConditionArbiterReady = "ArbiterReady"
+	ConditionArbiterReady   = "ArbiterReady"
+	ConditionNetworkSecured = "NetworkSecured"
 )
 
 func setCondition(cr *databasev1alpha1.MongoCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
@@ -94,4 +95,8 @@ func setArbiterReadyCondition(cr *databasev1alpha1.MongoCluster, reason, message
 
 func clearArbiterReadyCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
 	setCondition(cr, ConditionArbiterReady, metav1.ConditionFalse, reason, message)
+}
+
+func setNetworkSecuredCondition(cr *databasev1alpha1.MongoCluster, reason, message string) {
+	setCondition(cr, ConditionNetworkSecured, metav1.ConditionTrue, reason, message)
 }

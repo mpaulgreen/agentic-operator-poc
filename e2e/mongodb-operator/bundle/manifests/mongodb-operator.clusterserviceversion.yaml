@@ -34,7 +34,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/mongodb-operator
-  name: mongodb-operator.v0.2.0
+  name: mongodb-operator.v0.3.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -57,6 +57,8 @@ spec:
       - kind: Job
         version: v1
       - kind: Deployment
+        version: v1
+      - kind: NetworkPolicy
         version: v1
       specDescriptors:
       - path: replicas
@@ -115,10 +117,11 @@ spec:
     MongoDB replica sets using StatefulSets, Services, Secrets,
     ConfigMaps, backup Jobs, and Arbiter Deployments.
 
-    ## v0.2.0 — Arbiter Node
-    - Added Arbiter support for replica set elections
-    - Arbiter is a vote-only member (no data storage)
-    - Conditional Deployment: created when enabled, deleted when disabled
+    ## v0.3.0 — Webhooks + Network Security
+    - Added defaulting/validating admission webhooks
+    - Webhook defaults: replicas, version, backup retentionDays
+    - Webhook validation: odd replicas, auth mutual exclusion, storage reduction
+    - Added NetworkPolicy for cluster isolation (port 27017 ingress, DNS egress)
   displayName: MongoDB Operator
   icon:
   - base64data: ""
@@ -221,6 +224,18 @@ spec:
           - update
           - watch
         - apiGroups:
+          - networking.k8s.io
+          resources:
+          - networkpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - batch
           resources:
           - jobs
@@ -260,7 +275,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/mongodb-operator:v0.2.0
+                image: quay.io/mpaulgreen/mongodb-operator:v0.3.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -352,5 +367,46 @@ spec:
   provider:
     name: Example
     url: https://example.com
-  replaces: mongodb-operator.v0.1.0
-  version: 0.2.0
+  replaces: mongodb-operator.v0.2.0
+  version: 0.3.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 9443
+    deploymentName: mongodb-operator-controller-manager
+    failurePolicy: Fail
+    generateName: mmongoclusterv1alpha1.kb.io
+    rules:
+    - apiGroups:
+      - database.mongodb.example.com
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - mongoclusters
+    sideEffects: None
+    targetPort: 9443
+    type: MutatingAdmissionWebhook
+    webhookPath: /mutate-database-mongodb-example-com-v1alpha1-mongocluster
+  - admissionReviewVersions:
+    - v1
+    containerPort: 9443
+    deploymentName: mongodb-operator-controller-manager
+    failurePolicy: Fail
+    generateName: vmongoclusterv1alpha1.kb.io
+    rules:
+    - apiGroups:
+      - database.mongodb.example.com
+      apiVersions:
+      - v1alpha1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - mongoclusters
+    sideEffects: None
+    targetPort: 9443
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate-database-mongodb-example-com-v1alpha1-mongocluster
