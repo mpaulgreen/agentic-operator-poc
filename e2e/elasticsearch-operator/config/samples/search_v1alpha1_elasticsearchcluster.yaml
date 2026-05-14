@@ -1,0 +1,12 @@
+apiVersion: search.elasticsearch.example.com/v1alpha1
+kind: ElasticsearchCluster
+metadata:
+  labels:
+    app.kubernetes.io/name: elasticsearch-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: elasticsearchcluster-sample
+spec:
+  replicas: 3
+  version: "8.14"
+  storage:
+    size: 10Gi

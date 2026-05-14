@@ -1,0 +1,19 @@
+domain: elasticsearch.example.com
+layout:
+- go.kubebuilder.io/v4
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: elasticsearch-operator
+repo: github.com/example/elasticsearch-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: elasticsearch.example.com
+  group: search
+  kind: ElasticsearchCluster
+  path: github.com/example/elasticsearch-operator/api/v1alpha1
+  version: v1alpha1
+version: "3"

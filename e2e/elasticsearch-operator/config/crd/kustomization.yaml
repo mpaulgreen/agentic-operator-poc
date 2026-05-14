@@ -1,0 +1,10 @@
+resources:
+- bases/search.elasticsearch.example.com_elasticsearchclusters.yaml
+#+kubebuilder:scaffold:crdkustomizeresource
+
+#+kubebuilder:scaffold:crdkustomizewebhookpatch
+
+#+kubebuilder:scaffold:crdkustomizecainjectionpatch
+
+configurations:
+- kustomizeconfig.yaml

@@ -1,0 +1,10 @@
+resources:
+- service_account.yaml
+- role.yaml
+- role_binding.yaml
+- leader_election_role.yaml
+- leader_election_role_binding.yaml
+- metrics_reader_clusterrole.yaml
+- metrics_service.yaml
+- elasticsearchcluster_editor_role.yaml
+- elasticsearchcluster_viewer_role.yaml
