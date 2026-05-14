@@ -121,3 +121,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - search.elasticsearch.example.com
+  resources:
+  - elasticsearchindices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - search.elasticsearch.example.com
+  resources:
+  - elasticsearchindices/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - search.elasticsearch.example.com
+  resources:
+  - elasticsearchindices/status
+  verbs:
+  - get
+  - patch
+  - update

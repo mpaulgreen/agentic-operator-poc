@@ -8,3 +8,5 @@ resources:
 - metrics_service.yaml
 - elasticsearchcluster_editor_role.yaml
 - elasticsearchcluster_viewer_role.yaml
+- elasticsearchindex_editor_role.yaml
+- elasticsearchindex_viewer_role.yaml

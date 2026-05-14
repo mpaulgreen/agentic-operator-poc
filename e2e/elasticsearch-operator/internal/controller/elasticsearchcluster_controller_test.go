@@ -519,6 +519,202 @@ var _ = Describe("ElasticsearchCluster Controller", func() {
 	})
 })
 
+// =========================================================================
+// ElasticsearchIndex Controller Tests
+// =========================================================================
+
+var _ = Describe("ElasticsearchIndex Controller", func() {
+	var (
+		ctx             context.Context
+		indexReconciler *ElasticsearchIndexReconciler
+		indexCR         *searchv1beta1.ElasticsearchIndex
+		ns              *corev1.Namespace
+		crName          string
+		nsName          string
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+
+		nsName = fmt.Sprintf("test-idx-ns-%d", time.Now().UnixNano())
+		ns = &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: nsName},
+		}
+		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+		crName = fmt.Sprintf("test-idx-%d", time.Now().UnixNano())
+		indexCR = &searchv1beta1.ElasticsearchIndex{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      crName,
+				Namespace: nsName,
+			},
+			Spec: searchv1beta1.ElasticsearchIndexSpec{
+				IndexName:  "logs",
+				Shards:     3,
+				Replicas:   2,
+				ClusterRef: "my-es-cluster",
+			},
+		}
+		Expect(k8sClient.Create(ctx, indexCR)).To(Succeed())
+
+		// Re-fetch to get UID and ResourceVersion for owner references
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: nsName}, indexCR)).To(Succeed())
+
+		indexReconciler = &ElasticsearchIndexReconciler{
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Recorder: record.NewFakeRecorder(100),
+		}
+	})
+
+	AfterEach(func() {
+		// Remove finalizer before deletion
+		current := &searchv1beta1.ElasticsearchIndex{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: nsName}, current); err == nil {
+			if controllerutil.ContainsFinalizer(current, elasticsearchIndexFinalizer) {
+				controllerutil.RemoveFinalizer(current, elasticsearchIndexFinalizer)
+				_ = k8sClient.Update(ctx, current)
+			}
+			_ = k8sClient.Delete(ctx, current)
+		}
+		_ = k8sClient.Delete(ctx, ns)
+	})
+
+	// -------------------------------------------------------------------
+	// Lifecycle tests
+	// -------------------------------------------------------------------
+	Describe("When reconciling an ElasticsearchIndex", func() {
+		It("should add finalizer on first reconciliation", func() {
+			_, err := indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &searchv1beta1.ElasticsearchIndex{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: nsName}, updated)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(updated, elasticsearchIndexFinalizer)).To(BeTrue())
+		})
+
+		It("should create all managed resources", func() {
+			// Need two reconciles: first adds finalizer, second creates resources
+			_, err := indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+
+			// ConfigMap
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-index-template", Namespace: nsName}, cm)).To(Succeed())
+		})
+
+		It("should be idempotent on repeated reconciliation", func() {
+			// First reconcile
+			_, err := indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Capture resource version
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-index-template", Namespace: nsName}, cm)).To(Succeed())
+			cmRV := cm.ResourceVersion
+
+			// Third reconcile
+			_, err = indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify resource version unchanged
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-index-template", Namespace: nsName}, cm)).To(Succeed())
+			Expect(cm.ResourceVersion).To(Equal(cmRV))
+		})
+
+		It("should set status phase to Active and indexReady to true after reconcile", func() {
+			_, err := indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &searchv1beta1.ElasticsearchIndex{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: nsName}, updated)).To(Succeed())
+			Expect(updated.Status.Phase).To(Equal("Active"))
+			Expect(updated.Status.IndexReady).To(BeTrue())
+		})
+
+		It("should handle deletion with finalizer cleanup", func() {
+			// First reconcile to add finalizer and create resources
+			_, err := indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify finalizer is present
+			updated := &searchv1beta1.ElasticsearchIndex{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: nsName}, updated)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(updated, elasticsearchIndexFinalizer)).To(BeTrue())
+
+			// Delete the CR
+			Expect(k8sClient.Delete(ctx, updated)).To(Succeed())
+
+			// Re-fetch to get the deletion timestamp
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: nsName}, updated)).To(Succeed())
+			Expect(updated.DeletionTimestamp).NotTo(BeNil())
+
+			// Reconcile should handle deletion and remove finalizer
+			_, err = indexReconciler.Reconcile(ctx, reconcileRequest(crName, nsName))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify CR is gone (finalizer removed allows deletion to complete)
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: nsName}, updated)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	// -------------------------------------------------------------------
+	// reconcileIndexConfigMap
+	// -------------------------------------------------------------------
+	Context("When reconciling Index ConfigMap", func() {
+		It("should create ConfigMap with correct index template JSON", func() {
+			Expect(indexReconciler.reconcileIndexConfigMap(ctx, indexCR)).To(Succeed())
+
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-index-template", Namespace: nsName}, cm)).To(Succeed())
+			Expect(cm.Data).To(HaveKey("index-template.json"))
+			Expect(cm.Data["index-template.json"]).To(ContainSubstring(`"index_patterns": ["logs-*"]`))
+			Expect(cm.Data["index-template.json"]).To(ContainSubstring(`"number_of_shards": 3`))
+			Expect(cm.Data["index-template.json"]).To(ContainSubstring(`"number_of_replicas": 2`))
+		})
+
+		It("should have correct labels including clusterRef", func() {
+			Expect(indexReconciler.reconcileIndexConfigMap(ctx, indexCR)).To(Succeed())
+
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-index-template", Namespace: nsName}, cm)).To(Succeed())
+			Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "elasticsearch"))
+			Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", crName))
+			Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "elasticsearch-operator"))
+			Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "my-es-cluster"))
+			Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "index-template"))
+		})
+
+		It("should have owner reference", func() {
+			Expect(indexReconciler.reconcileIndexConfigMap(ctx, indexCR)).To(Succeed())
+
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-index-template", Namespace: nsName}, cm)).To(Succeed())
+			Expect(cm.OwnerReferences).To(HaveLen(1))
+			Expect(cm.OwnerReferences[0].Name).To(Equal(crName))
+		})
+
+		It("should not recreate existing ConfigMap (idempotent)", func() {
+			Expect(indexReconciler.reconcileIndexConfigMap(ctx, indexCR)).To(Succeed())
+
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-index-template", Namespace: nsName}, cm)).To(Succeed())
+			originalVersion := cm.ResourceVersion
+
+			Expect(indexReconciler.reconcileIndexConfigMap(ctx, indexCR)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-index-template", Namespace: nsName}, cm)).To(Succeed())
+			Expect(cm.ResourceVersion).To(Equal(originalVersion))
+		})
+	})
+})
+
 // reconcileRequest creates a ctrl.Request for the given name and namespace.
 func reconcileRequest(name, namespace string) ctrl.Request {
 	return ctrl.Request{

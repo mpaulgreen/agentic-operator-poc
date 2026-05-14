@@ -25,6 +25,23 @@ metadata:
               "schedule": "0 2 * * *"
             }
           }
+        },
+        {
+          "apiVersion": "search.elasticsearch.example.com/v1beta1",
+          "kind": "ElasticsearchIndex",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "elasticsearch-operator"
+            },
+            "name": "elasticsearchindex-sample"
+          },
+          "spec": {
+            "indexName": "my-index",
+            "shards": 1,
+            "replicas": 1,
+            "clusterRef": "elasticsearchcluster-sample"
+          }
         }
       ]
     capabilities: Basic Install
@@ -34,7 +51,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/elasticsearch-operator
-  name: elasticsearch-operator.v0.4.0
+  name: elasticsearch-operator.v0.5.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -131,6 +148,37 @@ spec:
       - path: conditions
         displayName: Conditions
         description: Latest available observations of the resource state
+    - description: ElasticsearchIndex is the Schema for the elasticsearchindices API
+      displayName: Elasticsearch Index
+      kind: ElasticsearchIndex
+      name: elasticsearchindices.search.elasticsearch.example.com
+      version: v1beta1
+      resources:
+      - kind: ConfigMap
+        version: v1
+      specDescriptors:
+      - path: indexName
+        displayName: Index Name
+        description: The Elasticsearch index name
+      - path: shards
+        displayName: Shards
+        description: Number of primary shards
+      - path: replicas
+        displayName: Replicas
+        description: Number of replica shards
+      - path: clusterRef
+        displayName: Cluster Ref
+        description: Name of the ElasticsearchCluster
+      statusDescriptors:
+      - path: phase
+        displayName: Phase
+        description: Current lifecycle phase of the ElasticsearchIndex
+      - path: indexReady
+        displayName: Index Ready
+        description: Whether the index template is configured
+      - path: conditions
+        displayName: Conditions
+        description: Latest available observations of the resource state
   description: |
     ## Overview
     The Elasticsearch Operator manages ElasticsearchCluster resources on OpenShift.
@@ -165,6 +213,32 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - search.elasticsearch.example.com
+          resources:
+          - elasticsearchindices
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - search.elasticsearch.example.com
+          resources:
+          - elasticsearchindices/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - search.elasticsearch.example.com
+          resources:
+          - elasticsearchindices/finalizers
+          verbs:
+          - update
         - apiGroups:
           - search.elasticsearch.example.com
           resources:
@@ -298,7 +372,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/elasticsearch-operator:v0.4.0
+                image: quay.io/mpaulgreen/elasticsearch-operator:v0.5.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -430,5 +504,5 @@ spec:
   provider:
     name: Example
     url: https://example.com
-  replaces: elasticsearch-operator.v0.3.0
-  version: 0.4.0
+  replaces: elasticsearch-operator.v0.4.0
+  version: 0.5.0

@@ -147,3 +147,59 @@ func (in *ElasticsearchClusterStatus) DeepCopy() *ElasticsearchClusterStatus {
 	if in == nil { return nil }
 	out := new(ElasticsearchClusterStatus); in.DeepCopyInto(out); return out
 }
+
+func (in *ElasticsearchIndex) DeepCopyInto(out *ElasticsearchIndex) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	out.Spec = in.Spec
+	in.Status.DeepCopyInto(&out.Status)
+}
+func (in *ElasticsearchIndex) DeepCopy() *ElasticsearchIndex {
+	if in == nil { return nil }
+	out := new(ElasticsearchIndex); in.DeepCopyInto(out); return out
+}
+func (in *ElasticsearchIndex) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil { return c }
+	return nil
+}
+
+func (in *ElasticsearchIndexList) DeepCopyInto(out *ElasticsearchIndexList) {
+	*out = *in
+	out.TypeMeta = in.TypeMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	if in.Items != nil {
+		in, out := &in.Items, &out.Items
+		*out = make([]ElasticsearchIndex, len(*in))
+		for i := range *in { (*in)[i].DeepCopyInto(&(*out)[i]) }
+	}
+}
+func (in *ElasticsearchIndexList) DeepCopy() *ElasticsearchIndexList {
+	if in == nil { return nil }
+	out := new(ElasticsearchIndexList); in.DeepCopyInto(out); return out
+}
+func (in *ElasticsearchIndexList) DeepCopyObject() runtime.Object {
+	if c := in.DeepCopy(); c != nil { return c }
+	return nil
+}
+
+func (in *ElasticsearchIndexSpec) DeepCopyInto(out *ElasticsearchIndexSpec) {
+	*out = *in
+}
+func (in *ElasticsearchIndexSpec) DeepCopy() *ElasticsearchIndexSpec {
+	if in == nil { return nil }
+	out := new(ElasticsearchIndexSpec); in.DeepCopyInto(out); return out
+}
+
+func (in *ElasticsearchIndexStatus) DeepCopyInto(out *ElasticsearchIndexStatus) {
+	*out = *in
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]metav1.Condition, len(*in))
+		for i := range *in { (*in)[i].DeepCopyInto(&(*out)[i]) }
+	}
+}
+func (in *ElasticsearchIndexStatus) DeepCopy() *ElasticsearchIndexStatus {
+	if in == nil { return nil }
+	out := new(ElasticsearchIndexStatus); in.DeepCopyInto(out); return out
+}

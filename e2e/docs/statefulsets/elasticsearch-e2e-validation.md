@@ -2072,3 +2072,503 @@ sleep 15
 | 21 | Webhook definitions use v1beta1 paths only | D.10 | Not v1alpha1 |
 | 22 | ILM descriptors in CSV | D.10 | ilm.*, maxShards, ilmEnabled |
 | 23 | Bundle validates | D.10 | No errors |
+
+---
+---
+
+# Scenario E: Same-Group CRD — ElasticsearchIndex (v0.5.0)
+
+Adds a second CRD (`ElasticsearchIndex`) in the same API group (`search.elasticsearch.example.com`), following `scaffolding-operator` Workflow B Pattern B (same-group, flat layout). Built using:
+- **Step 1** (Generate): `scaffolding-operator` SKILL (Workflow B, Pattern B) — Same-group scaffold
+- **Step 2** (Generate): `designing-operator-api` SKILL (Workflow A) — ElasticsearchIndex types
+- **Step 3** (Generate): `implementing-reconciliation` SKILL (Workflow A) — ElasticsearchIndex controller
+- **Step 4a** (Test): `operator-test-generator` SUBAGENT — 10 new tests
+- **Step 4b** (Review): `operator-reviewer` SUBAGENT — 1 Critical found + fixed (RBAC plural mismatch)
+- **Step 5** (Generate): `bundling-operator` SKILL (Workflow B) — CSV v0.5.0 with 2 owned CRDs
+- **Step 6** (Validate): `operator-bundle-validator` SUBAGENT — All checks pass
+
+**Changes**: ElasticsearchIndex CRD (indexName, shards, replicas, clusterRef), ElasticsearchIndex controller with reconcileIndexConfigMap (creates ConfigMap with index template JSON), finalizer, RBAC for elasticsearchindices + configmaps, CSV v0.5.0 with 2 owned CRDs and 14 RBAC rules.
+
+**Key aspects**:
+- Same-group layout: both CRDs in `api/v1beta1/`, both controllers in `internal/controller/`, no multigroup
+- Kubernetes pluralizes "Index" → "Indices" (Latin plural): CRD name is `elasticsearchindices.search.elasticsearch.example.com`
+- ConfigMap name: `{index-name}-index-template` with key `index-template.json`
+- clusterRef links index to cluster (cross-CRD reference via label `app.kubernetes.io/part-of`)
+
+**Prerequisites**: Scenario D completed successfully. Operator cleaned up from cluster.
+
+## Scenario E Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/elasticsearch-operator:v0.5.0
+export BUNDLE_IMG=quay.io/mpaulgreen/elasticsearch-operator-bundle:v0.5.0
+export NAMESPACE=elasticsearch-operator-system
+
+cd e2e/elasticsearch-operator
+```
+
+---
+
+## Phase E.1: Build and Deploy v0.5.0
+
+### E.1.1 Build the Operator Image
+
+```bash
+make manifests
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### E.1.2 Deploy the Operator
+
+#### Option A: `make deploy` (Development — requires cert-manager)
+
+```bash
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/elasticsearch-operator:v0.5.0|$IMG|g" bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml
+
+# Refresh CRDs in bundle
+cp config/crd/bases/*.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### E.1.3 Verify Deployment
+
+```bash
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+
+# Both CRDs installed
+oc get crd elasticsearchclusters.search.elasticsearch.example.com && echo "PASS: Cluster CRD"
+oc get crd elasticsearchindices.search.elasticsearch.example.com && echo "PASS: Index CRD"
+
+# Index CRD has expected fields
+oc get crd elasticsearchindices.search.elasticsearch.example.com -o jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+
+# Controller watching EventSources for both CRDs
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=30 | grep -E "Starting EventSource|Starting workers"
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.5.0 image
+- [ ] Both CRDs installed: `elasticsearchclusters` + `elasticsearchindices`
+- [ ] Index CRD fields: clusterRef, indexName, replicas, shards
+
+---
+
+## Phase E.2: ElasticsearchCluster Regression
+
+### E.2.1 Create ElasticsearchCluster
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: search.elasticsearch.example.com/v1beta1
+kind: ElasticsearchCluster
+metadata:
+  name: es-cluster
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "8.14"
+  storage:
+    size: 1Gi
+EOF
+
+sleep 30
+```
+
+### E.2.2 Verify Cluster Resources
+
+```bash
+echo "=== Cluster Resources ==="
+oc get secret es-cluster-auth -n $NAMESPACE && echo "PASS: Secret" || echo "FAIL"
+oc get configmap es-cluster-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+oc get service es-cluster-http -n $NAMESPACE && echo "PASS: HTTP Service" || echo "FAIL"
+oc get statefulset es-cluster -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL"
+oc get networkpolicy es-cluster-network-policy -n $NAMESPACE && echo "PASS: NetworkPolicy" || echo "FAIL"
+
+echo ""
+echo "=== Status ==="
+oc get elasticsearchcluster es-cluster -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All cluster resources created (regression confirmed)
+- [ ] Status shows Running
+
+---
+
+## Phase E.3: Create ElasticsearchIndex
+
+### E.3.1 Create Index CR
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: search.elasticsearch.example.com/v1beta1
+kind: ElasticsearchIndex
+metadata:
+  name: logs-index
+  namespace: $NAMESPACE
+spec:
+  indexName: logs
+  shards: 3
+  replicas: 2
+  clusterRef: es-cluster
+EOF
+
+sleep 15
+```
+
+### E.3.2 Verify Index ConfigMap Created
+
+```bash
+echo "=== Index ConfigMap ==="
+oc get configmap logs-index-index-template -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+
+echo ""
+echo "=== Owner Reference ==="
+oc get configmap logs-index-index-template -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be ElasticsearchIndex)"
+
+echo ""
+echo "=== Index Status ==="
+oc get elasticsearchindex logs-index -n $NAMESPACE -o jsonpath='{.status.phase}' && echo " (should be Active)"
+oc get elasticsearchindex logs-index -n $NAMESPACE -o jsonpath='{.status.indexReady}' && echo " (should be true)"
+```
+
+**Expected**:
+- [ ] ConfigMap `logs-index-index-template` created
+- [ ] Owner reference → ElasticsearchIndex
+- [ ] Status phase = Active, indexReady = true
+
+### E.3.3 Verify Index Available Condition
+
+```bash
+oc get elasticsearchindex logs-index -n $NAMESPACE -o jsonpath='{.status.conditions}' | python3 -c "
+import json, sys
+conditions = json.load(sys.stdin)
+for c in conditions:
+    if c['type'] == 'Available':
+        print(f\"Available: {c['status']} (reason: {c['reason']})\")
+"
+```
+
+**Expected**:
+- [ ] Available: True (IndexConfigured)
+
+---
+
+## Phase E.4: Verify Index ConfigMap Content
+
+### E.4.1 Check Template JSON
+
+```bash
+echo "=== Index Template JSON ==="
+oc get configmap logs-index-index-template -n $NAMESPACE -o jsonpath='{.data.index-template\.json}'
+```
+
+**Expected**: Contains `"index_patterns": ["logs-*"]`, `"number_of_shards": 3`, `"number_of_replicas": 2`.
+
+### E.4.2 Check ConfigMap Labels
+
+```bash
+echo ""
+echo "=== Labels ==="
+oc get configmap logs-index-index-template -n $NAMESPACE -o jsonpath='{.metadata.labels}' | python3 -m json.tool
+```
+
+**Expected**:
+- [ ] `app.kubernetes.io/part-of: es-cluster` (clusterRef)
+- [ ] `app.kubernetes.io/component: index-template`
+
+---
+
+## Phase E.5: Validation Markers
+
+### E.5.1 Reject Shards > 50
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: search.elasticsearch.example.com/v1beta1
+kind: ElasticsearchIndex
+metadata:
+  name: bad-index
+  namespace: $NAMESPACE
+spec:
+  indexName: bad
+  shards: 100
+  replicas: 1
+  clusterRef: es-cluster
+EOF
+```
+
+**Expected**: Rejected — shards max is 50.
+
+### E.5.2 Reject Replicas > 5
+
+```bash
+cat <<EOF | oc apply -f - 2>&1
+apiVersion: search.elasticsearch.example.com/v1beta1
+kind: ElasticsearchIndex
+metadata:
+  name: bad-index
+  namespace: $NAMESPACE
+spec:
+  indexName: bad
+  shards: 1
+  replicas: 10
+  clusterRef: es-cluster
+EOF
+```
+
+**Expected**: Rejected — replicas max is 5.
+
+### E.5.3 Defaults Applied
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: search.elasticsearch.example.com/v1beta1
+kind: ElasticsearchIndex
+metadata:
+  name: defaults-index
+  namespace: $NAMESPACE
+spec:
+  indexName: defaults-test
+  clusterRef: es-cluster
+EOF
+
+sleep 5
+oc get elasticsearchindex defaults-index -n $NAMESPACE -o jsonpath='{.spec.shards}' && echo " (should be 1)"
+oc get elasticsearchindex defaults-index -n $NAMESPACE -o jsonpath='{.spec.replicas}' && echo " (should be 1)"
+
+oc delete elasticsearchindex defaults-index -n $NAMESPACE
+sleep 5
+```
+
+**Expected**:
+- [ ] shards defaulted to 1, replicas defaulted to 1
+
+---
+
+## Phase E.6: Multiple Indexes
+
+### E.6.1 Create Second Index
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: search.elasticsearch.example.com/v1beta1
+kind: ElasticsearchIndex
+metadata:
+  name: metrics-index
+  namespace: $NAMESPACE
+spec:
+  indexName: metrics
+  shards: 5
+  replicas: 1
+  clusterRef: es-cluster
+EOF
+
+sleep 10
+
+echo "=== Both Indexes ==="
+oc get elasticsearchindex -n $NAMESPACE
+
+echo ""
+echo "=== Both ConfigMaps ==="
+oc get configmap -n $NAMESPACE | grep index-template
+```
+
+**Expected**:
+- [ ] Two ElasticsearchIndex CRs (logs-index, metrics-index) both Active
+- [ ] Two separate ConfigMaps (no cross-contamination)
+
+### E.6.2 Delete One Index, Other Unaffected
+
+```bash
+oc delete elasticsearchindex metrics-index -n $NAMESPACE
+sleep 10
+
+oc get elasticsearchindex logs-index -n $NAMESPACE -o jsonpath='{.status.phase}' && echo " (should be Active)"
+oc get configmap logs-index-index-template -n $NAMESPACE && echo "PASS: logs ConfigMap still exists"
+oc get configmap metrics-index-index-template -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: metrics ConfigMap cleaned"
+```
+
+**Expected**:
+- [ ] logs-index still Active, metrics-index cleaned
+
+---
+
+## Phase E.7: Idempotency
+
+### E.7.1 Re-reconcile and Verify No Duplicates
+
+```bash
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment -l control-plane=controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "Index ConfigMaps: $(oc get configmap -n $NAMESPACE 2>&1 | grep -c 'index-template') (should be 1)"
+echo "Cluster StatefulSets: $(oc get statefulset -n $NAMESPACE 2>&1 | grep -c es-cluster) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each, no duplicates.
+
+---
+
+## Phase E.8: Delete Index CR
+
+### E.8.1 Delete Index and Verify ConfigMap Cleaned
+
+```bash
+oc delete elasticsearchindex logs-index -n $NAMESPACE
+sleep 10
+
+oc get configmap logs-index-index-template -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Index ConfigMap cleaned"
+```
+
+**Expected**:
+- [ ] Index ConfigMap garbage collected
+
+### E.8.2 Verify Cluster Unaffected
+
+```bash
+oc get elasticsearchcluster es-cluster -n $NAMESPACE -o jsonpath='{.status.phase}' && echo " (should be Running)"
+oc get statefulset es-cluster -n $NAMESPACE && echo "PASS: Cluster StatefulSet still exists"
+```
+
+**Expected**:
+- [ ] Cluster still Running (index deletion doesn't affect cluster)
+
+---
+
+## Phase E.9: Delete Cluster CR
+
+### E.9.1 Delete Cluster and Verify All Cluster Resources Cleaned
+
+```bash
+oc delete elasticsearchcluster es-cluster -n $NAMESPACE
+sleep 15
+
+oc get secret es-cluster-auth -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Secret cleaned"
+oc get statefulset es-cluster -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: StatefulSet cleaned"
+oc get networkpolicy es-cluster-network-policy -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: NetworkPolicy cleaned"
+```
+
+**Expected**:
+- [ ] All cluster resources garbage collected
+
+---
+
+## Phase E.10: RBAC Verification
+
+### E.10.1 Verify ElasticsearchIndex RBAC
+
+```bash
+oc auth can-i create elasticsearchindices --as=system:serviceaccount:elasticsearch-operator-system:elasticsearch-operator-controller-manager -n elasticsearch-operator-system && echo "PASS: Can create ElasticsearchIndex" || echo "FAIL"
+oc auth can-i delete elasticsearchindices --as=system:serviceaccount:elasticsearch-operator-system:elasticsearch-operator-controller-manager -n elasticsearch-operator-system && echo "PASS: Can delete ElasticsearchIndex" || echo "FAIL"
+```
+
+**Expected**: Both return "yes".
+
+---
+
+## Phase E.11: OLM Bundle Validation
+
+### E.11.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*elasticsearch-operator.v' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `elasticsearch-operator.v0.5.0`
+- [ ] replaces: `elasticsearch-operator.v0.4.0`
+- [ ] version: `0.5.0`
+
+### E.11.2 Verify Two Owned CRDs
+
+```bash
+grep 'kind: Elasticsearch' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml | head -5
+grep 'name: elasticsearch' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml | grep -v 'operator' | head -5
+```
+
+**Expected**: Both ElasticsearchCluster and ElasticsearchIndex listed as owned CRDs.
+
+### E.11.3 Verify ElasticsearchIndex Descriptors
+
+```bash
+grep -E 'indexName|shards|clusterRef|indexReady' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml | grep 'path:' | head -10
+```
+
+**Expected**: specDescriptors for indexName, shards, replicas, clusterRef + statusDescriptor for indexReady.
+
+### E.11.4 Bundle Validate
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario E Cleanup
+
+```bash
+oc delete elasticsearchindex --all -n $NAMESPACE
+oc delete elasticsearchcluster --all -n $NAMESPACE
+sleep 15
+
+# Undeploy the operator:
+# make undeploy                                                        # if deployed with make deploy
+# operator-sdk cleanup elasticsearch-operator --namespace $NAMESPACE    # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario E Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | Operator deploys with v0.5.0 image | E.1 | Pod Running |
+| 2 | Both CRDs installed (clusters + indices) | E.1 | 2 CRDs |
+| 3 | Index CRD has expected fields | E.1 | clusterRef, indexName, replicas, shards |
+| 4 | ElasticsearchCluster resources still work | E.2 | Regression pass |
+| 5 | Cluster status Running | E.2 | Running |
+| 6 | Index ConfigMap created | E.3 | logs-index-index-template |
+| 7 | ConfigMap owner ref → ElasticsearchIndex | E.3 | Correct |
+| 8 | Index status Active + indexReady true | E.3 | Active |
+| 9 | Available condition True | E.3 | IndexConfigured |
+| 10 | ConfigMap has correct template JSON | E.4 | shards=3, replicas=2, logs-* |
+| 11 | ConfigMap labels include clusterRef | E.4 | part-of=es-cluster |
+| 12 | Reject shards > 50 | E.5 | Validation error |
+| 13 | Reject replicas > 5 | E.5 | Validation error |
+| 14 | Defaults applied (shards=1, replicas=1) | E.5 | Defaulted |
+| 15 | Multiple indexes independent | E.6 | Both Active |
+| 16 | Delete one index, other unaffected | E.6 | No cross-contamination |
+| 17 | Idempotent — no duplicates | E.7 | Exactly 1 each |
+| 18 | Index ConfigMap cleaned on delete | E.8 | Garbage collected |
+| 19 | Cluster unaffected by index deletion | E.8 | Still Running |
+| 20 | Cluster resources cleaned on cluster delete | E.9 | All cleaned |
+| 21 | ElasticsearchIndex RBAC works | E.10 | can-i returns yes |
+| 22 | CSV version 0.5.0 with replaces v0.4.0 | E.11 | Correct upgrade |
+| 23 | Two owned CRDs in CSV | E.11 | Cluster + Index |
+| 24 | ElasticsearchIndex descriptors in CSV | E.11 | indexName, shards, clusterRef |
+| 25 | Bundle validates | E.11 | No errors |

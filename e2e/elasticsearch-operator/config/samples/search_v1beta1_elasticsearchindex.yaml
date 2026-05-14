@@ -1,0 +1,12 @@
+apiVersion: search.elasticsearch.example.com/v1beta1
+kind: ElasticsearchIndex
+metadata:
+  labels:
+    app.kubernetes.io/name: elasticsearch-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: elasticsearchindex-sample
+spec:
+  indexName: my-index
+  shards: 1
+  replicas: 1
+  clusterRef: elasticsearchcluster-sample
