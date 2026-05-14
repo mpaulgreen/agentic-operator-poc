@@ -313,7 +313,7 @@ Operator projects are complex and diverse. E2E validation is organized by operat
 
 | Category | Examples | Patterns Tested | Status |
 |----------|---------|-----------------|--------|
-| **Stateful Workloads** | PostgreSQL, Redis, Kafka, MongoDB, Elasticsearch | StatefulSet, PVC, backup CronJob/Job, connection pooling, HA (PDB/anti-affinity/arbiter), multi-group CRD | **PostgreSQL DONE** (111/111), **Redis A-E DONE** (139/139, 0 fixes), **MongoDB A-E DONE** (150/150, 1 fix) |
+| **Stateful Workloads** | PostgreSQL, Redis, MongoDB, Elasticsearch | StatefulSet, PVC, backup CronJob/Job, connection pooling, HA (PDB/anti-affinity/arbiter), multi-group CRD | **PostgreSQL DONE** (111/111), **Redis A-E DONE** (139/139, 0 fixes), **MongoDB A-E DONE** (150/150, 1 fix), **Elasticsearch A DONE** (36/36, 0 fixes) |
 | **Application Platform** | RHOAI, Tekton, ArgoCD, ServiceMesh | Deployment, multi-component, cross-namespace | Planned |
 | **Infrastructure / Cloud** | Cluster autoscaler, node management | Cluster-scoped CRDs, node selectors, taints | Planned |
 | **Network / Security** | cert-manager, Kuadrant, External DNS | Webhooks, NetworkPolicy, TLS certificates, ingress | Partial (tested within PostgreSQL C) |
@@ -373,6 +373,23 @@ Gap-coverage test targeting untested skill patterns: Job (batch/v1) reconciliati
 | C | Webhooks + NetworkPolicy | v0.3.0 | 25 | 4 skills (Workflow C) + 3 subagents |
 | D | API Maturity + Sharding | v0.4.0 | 23 | 4 skills (Workflow D) + 3 subagents |
 | E | Different-group CRD | v0.5.0 | 33 | scaffolding C + all |
+
+#### Elasticsearch Operator (In Progress)
+
+N=4 generality proof — 4th stateful workload to confirm skills are truly general-purpose. Tests two-port StatefulSet (9200+9300), two-purpose Services (HTTP+transport), CronJob backup with schedule update.
+
+- **Prompts**: [`e2e/docs/statefulsets/elasticsearch-prompts.md`](../e2e/docs/statefulsets/elasticsearch-prompts.md)
+- **Validation guide**: [`e2e/docs/statefulsets/elasticsearch-e2e-validation.md`](../e2e/docs/statefulsets/elasticsearch-e2e-validation.md)
+- **Operator code**: `e2e/elasticsearch-operator/`
+- **Results**: Scenario A complete — 36/36 test conditions pass on OpenShift, zero skill modifications. Scenarios B-E pending.
+
+| Scenario | Feature | Version | Tests | Skills Exercised |
+|----------|---------|---------|-------|-----------------|
+| A | Core (data nodes) | v0.1.0 | 36 | All 5 skills (Workflow A) + 3 subagents |
+| B | Dedicated master nodes | v0.2.0 | — | Pending |
+| C | Webhooks + NetworkPolicy | v0.3.0 | — | Pending |
+| D | API Maturity + ILM | v0.4.0 | — | Pending |
+| E | Same-group CRD (ElasticsearchIndex) | v0.5.0 | — | Pending |
 
 #### Kafka Operator (Planned)
 

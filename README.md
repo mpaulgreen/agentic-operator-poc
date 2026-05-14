@@ -61,14 +61,17 @@ agentic-operator-poc/
 │   ├── postgres-operator/       # PostgreSQL operator (Scenarios A-D, v0.1.0→v0.4.0)
 │   ├── redis-operator/          # Redis operator (Scenarios A-E, v0.1.0→v0.5.0)
 │   ├── mongodb-operator/        # MongoDB operator (Scenarios A-E, v0.1.0→v0.5.0)
+│   ├── elasticsearch-operator/  # Elasticsearch operator (Scenario A, v0.1.0)
 │   └── docs/
 │       └── statefulsets/
-│           ├── postgres-prompts.md         # Scenario prompts + acceptance criteria
-│           ├── postgres-e2e-validation.md  # OpenShift validation guide (111 tests)
-│           ├── redis-prompts.md            # Redis scenario prompts
-│           ├── redis-e2e-validation.md     # Redis OpenShift validation guide (139 tests)
-│           ├── mongodb-prompts.md          # MongoDB scenario prompts
-│           └── mongodb-e2e-validation.md   # MongoDB OpenShift validation guide (150 tests)
+│           ├── postgres-prompts.md              # Scenario prompts + acceptance criteria
+│           ├── postgres-e2e-validation.md       # OpenShift validation guide (111 tests)
+│           ├── redis-prompts.md                 # Redis scenario prompts
+│           ├── redis-e2e-validation.md          # Redis OpenShift validation guide (139 tests)
+│           ├── mongodb-prompts.md               # MongoDB scenario prompts
+│           ├── mongodb-e2e-validation.md        # MongoDB OpenShift validation guide (150 tests)
+│           ├── elasticsearch-prompts.md         # Elasticsearch scenario prompts
+│           └── elasticsearch-e2e-validation.md  # Elasticsearch OpenShift validation guide (36 tests)
 ├── .claude/
 │   ├── agents/                  # Subagent definitions
 │   │   ├── operator-reviewer.md
