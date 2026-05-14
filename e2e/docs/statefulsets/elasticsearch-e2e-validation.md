@@ -680,3 +680,379 @@ sleep 15
 | 34 | Bundle validates | 11 | No errors |
 | 35 | Multiple instances independent | 12.1 | No cross-contamination |
 | 36 | Deleting one doesn't affect others | 12.2 | Others still Running |
+
+---
+---
+
+# Scenario B: Dedicated Master Nodes (v0.2.0)
+
+Adds dedicated master-eligible nodes as a separate Deployment for cluster coordination and election. Unlike MongoDB Arbiter (always 1 replica), Elasticsearch master nodes are multi-replica (1-5, odd for quorum) with **two ports** (9200+9300). Built using:
+- **Step 1** (Generate): `designing-operator-api` SKILL (Workflow B) — Added MasterSpec to types
+- **Step 2** (Generate): `implementing-reconciliation` SKILL (Workflow B) — Added reconcileMaster (conditional Deployment)
+- **Step 3a** (Test): `operator-test-generator` SUBAGENT (Workflow B) — Added master tests
+- **Step 3b** (Review): `operator-reviewer` SUBAGENT — Reviewed modified code
+- **Step 4** (Generate): `bundling-operator` SKILL (Workflow B) — Updated CSV v0.1.0 → v0.2.0
+- **Step 5** (Validate): `operator-bundle-validator` SUBAGENT — Validated updated bundle
+
+**Changes**: MasterSpec (enabled, replicas 1-5 odd, resources), reconcileMaster creating conditional multi-replica Deployment with two ports (9200+9300, no PVC), MasterReady condition, Deployment RBAC, check-update for replicas+resources, CSV v0.2.0 with replaces.
+
+**Key differences from previous conditional Deployments**:
+
+| Aspect | Redis Sentinel | MongoDB Arbiter | ES Master |
+|--------|---------------|-----------------|-----------|
+| Replicas | spec.sentinel.replicas (3-7) | Always 1 | spec.master.replicas (1-5, odd) |
+| Ports | 26379 only | 27017 only | 9200 + 9300 (two ports) |
+| PVC | No | No | No |
+| Quorum | Odd for quorum | Vote-only | Odd for quorum |
+
+**Prerequisites**: Scenario A completed successfully. All Scenario A CRs deleted.
+
+## Scenario B Environment Setup
+
+```bash
+export IMG=quay.io/mpaulgreen/elasticsearch-operator:v0.2.0
+export BUNDLE_IMG=quay.io/mpaulgreen/elasticsearch-operator-bundle:v0.2.0
+export NAMESPACE=elasticsearch-operator-system
+
+cd e2e/elasticsearch-operator
+```
+
+---
+
+## Phase B.1: Build and Deploy v0.2.0
+
+### B.1.1 Build the Operator Image
+
+```bash
+podman build --platform linux/amd64 -t $IMG .
+podman push $IMG
+```
+
+### B.1.2 Deploy the Operator
+
+#### Option A: `make deploy` (Development)
+
+```bash
+make manifests
+make deploy IMG=$IMG
+```
+
+#### Option B: OLM
+
+```bash
+# Update CSV image reference
+sed -i '' "s|quay.io/mpaulgreen/elasticsearch-operator:v0.2.0|$IMG|g" bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml
+
+# Refresh CRD in bundle
+make manifests
+cp config/crd/bases/search.elasticsearch.example.com_elasticsearchclusters.yaml bundle/manifests/
+
+# Build and push bundle
+podman build -t $BUNDLE_IMG -f bundle.Dockerfile .
+podman push $BUNDLE_IMG
+
+# Create namespace first
+oc new-project $NAMESPACE || oc create namespace $NAMESPACE
+
+# Deploy via OLM
+operator-sdk run bundle $BUNDLE_IMG --namespace $NAMESPACE --timeout 5m
+```
+
+### B.1.3 Verify Deployment
+
+```bash
+oc get pods -n $NAMESPACE -l control-plane=controller-manager
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=20
+
+# CRD has master field
+oc get crd elasticsearchclusters.search.elasticsearch.example.com -o jsonpath='{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties}' | python3 -c "import json,sys; print(sorted(json.load(sys.stdin).keys()))"
+
+# Controller watching 7 EventSources (added Deployment)
+oc logs -n $NAMESPACE -l control-plane=controller-manager --tail=20 | grep -E "Starting EventSource|Starting workers"
+```
+
+**Expected**:
+- [ ] Pod 1/1 Running with v0.2.0 image
+- [ ] CRD fields: auth, backup, master, replicas, resources, storage, version
+- [ ] Controller watching 7 EventSources (added Deployment)
+
+---
+
+## Phase B.2: Existing Features Regression
+
+### B.2.1 Create CR Without Master
+
+```bash
+cat <<EOF | oc apply -f -
+apiVersion: search.elasticsearch.example.com/v1alpha1
+kind: ElasticsearchCluster
+metadata:
+  name: es-test
+  namespace: $NAMESPACE
+spec:
+  replicas: 3
+  version: "8.14"
+  storage:
+    size: 1Gi
+EOF
+
+sleep 30
+```
+
+### B.2.2 Verify All Scenario A Resources Created
+
+```bash
+echo "=== Managed Resources ==="
+oc get secret es-test-auth -n $NAMESPACE && echo "PASS: Secret" || echo "FAIL"
+oc get configmap es-test-config -n $NAMESPACE && echo "PASS: ConfigMap" || echo "FAIL"
+oc get service es-test-http -n $NAMESPACE && echo "PASS: HTTP Service" || echo "FAIL"
+oc get service es-test-transport -n $NAMESPACE && echo "PASS: Transport Service" || echo "FAIL"
+oc get statefulset es-test -n $NAMESPACE && echo "PASS: StatefulSet" || echo "FAIL"
+
+echo ""
+echo "=== No Master (not configured) ==="
+oc get deployment es-test-master -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: No Master Deployment" || echo "FAIL"
+
+echo ""
+echo "=== Status ==="
+oc get elasticsearchcluster es-test -n $NAMESPACE -o wide
+```
+
+**Expected**:
+- [ ] All 5 existing resources created (Secret, ConfigMap, Service×2, StatefulSet)
+- [ ] No Master Deployment (master not configured)
+- [ ] Status shows Running
+
+---
+
+## Phase B.3: Enable Master Nodes
+
+### B.3.1 Enable Master
+
+```bash
+oc patch elasticsearchcluster es-test -n $NAMESPACE --type merge -p '{"spec":{"master":{"enabled":true,"replicas":3}}}'
+sleep 15
+```
+
+### B.3.2 Verify Master Deployment Created
+
+```bash
+echo "=== Master Deployment ==="
+oc get deployment es-test-master -n $NAMESPACE
+oc get deployment es-test-master -n $NAMESPACE -o jsonpath='{.spec.replicas}' && echo " replicas (should be 3)"
+
+echo ""
+echo "=== Master Ports (TWO — 9200+9300) ==="
+oc get deployment es-test-master -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[0].ports[*].containerPort}' && echo " (should be 9200 9300)"
+
+echo ""
+echo "=== Master Deployment Owner Reference ==="
+oc get deployment es-test-master -n $NAMESPACE -o jsonpath='{.metadata.ownerReferences[0].kind}' && echo " (should be ElasticsearchCluster)"
+
+echo ""
+echo "=== Master Deployment Labels ==="
+oc get deployment es-test-master -n $NAMESPACE -o jsonpath='{.metadata.labels}' | python3 -m json.tool
+```
+
+**Expected**:
+- [ ] Deployment `es-test-master` created with 3 replicas (multi-replica, unlike MongoDB Arbiter's 1)
+- [ ] Two ports: 9200 + 9300 (both HTTP and transport)
+- [ ] Owner reference → ElasticsearchCluster
+- [ ] Labels include `component: master`
+
+### B.3.3 Verify No PVC on Master (Coordination-Only)
+
+```bash
+oc get deployment es-test-master -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes}' 2>/dev/null && echo " volumes" || echo "No volumes (correct — master nodes don't store data)"
+```
+
+**Expected**:
+- [ ] No volumes/PVC on master Deployment (coordination-only, no data storage)
+
+### B.3.4 Verify MasterReady Condition
+
+```bash
+oc get elasticsearchcluster es-test -n $NAMESPACE -o jsonpath='{.status.conditions}' | python3 -c "
+import json, sys
+conditions = json.load(sys.stdin)
+for c in conditions:
+    if c['type'] == 'MasterReady':
+        print(f\"MasterReady: {c['status']} (reason: {c['reason']})\")
+"
+```
+
+**Expected**:
+- [ ] MasterReady: True
+
+### B.3.5 Verify Existing Resources Unaffected
+
+```bash
+oc get statefulset es-test -n $NAMESPACE && echo "PASS: StatefulSet still exists"
+oc get elasticsearchcluster es-test -n $NAMESPACE -o jsonpath='{.status.phase}' && echo " (should still be Running)"
+```
+
+---
+
+## Phase B.4: Disable Master
+
+### B.4.1 Disable Master
+
+```bash
+oc patch elasticsearchcluster es-test -n $NAMESPACE --type merge -p '{"spec":{"master":{"enabled":false}}}'
+sleep 15
+
+echo "=== Master After Disable ==="
+oc get deployment es-test-master -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Deployment deleted" || echo "FAIL: Deployment still exists"
+
+echo ""
+echo "=== MasterReady After Disable ==="
+oc get elasticsearchcluster es-test -n $NAMESPACE -o jsonpath='{.status.conditions}' | python3 -c "
+import json, sys
+conditions = json.load(sys.stdin)
+for c in conditions:
+    if c['type'] == 'MasterReady':
+        print(f\"MasterReady: {c['status']} (reason: {c['reason']})\")
+"
+```
+
+**Expected**:
+- [ ] Master Deployment deleted
+- [ ] MasterReady: False (MasterDisabled)
+
+---
+
+## Phase B.5: Idempotency
+
+### B.5.1 Re-enable Master and Re-reconcile
+
+```bash
+# Re-enable master
+oc patch elasticsearchcluster es-test -n $NAMESPACE --type merge -p '{"spec":{"master":{"enabled":true,"replicas":3}}}'
+sleep 15
+
+# Restart controller
+oc delete pod -n $NAMESPACE -l control-plane=controller-manager
+oc wait --for=condition=available deployment -l control-plane=controller-manager -n $NAMESPACE --timeout=60s
+sleep 15
+
+echo "Master Deployments: $(oc get deployment -n $NAMESPACE 2>&1 | grep -c es-test-master) (should be 1)"
+echo "StatefulSets: $(oc get statefulset -n $NAMESPACE 2>&1 | grep -c es-test) (should be 1)"
+```
+
+**Expected**: Exactly 1 of each, no duplicates.
+
+---
+
+## Phase B.6: Delete CR with Master
+
+### B.6.1 Delete and Verify All Resources Cleaned
+
+```bash
+oc delete elasticsearchcluster es-test -n $NAMESPACE
+sleep 15
+
+oc get secret es-test-auth -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Secret cleaned"
+oc get configmap es-test-config -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: ConfigMap cleaned"
+oc get service es-test-http -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: HTTP Service cleaned"
+oc get service es-test-transport -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Transport Service cleaned"
+oc get statefulset es-test -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: StatefulSet cleaned"
+oc get deployment es-test-master -n $NAMESPACE 2>&1 | grep "not found" && echo "PASS: Master Deployment cleaned"
+```
+
+**Expected**:
+- [ ] All 6 managed resources garbage collected (including Master Deployment)
+
+---
+
+## Phase B.7: RBAC Verification
+
+### B.7.1 Verify Deployment RBAC
+
+```bash
+oc auth can-i create deployments --as=system:serviceaccount:elasticsearch-operator-system:elasticsearch-operator-controller-manager -n elasticsearch-operator-system && echo "PASS: Can create Deployments" || echo "FAIL"
+oc auth can-i delete deployments --as=system:serviceaccount:elasticsearch-operator-system:elasticsearch-operator-controller-manager -n elasticsearch-operator-system && echo "PASS: Can delete Deployments" || echo "FAIL"
+```
+
+**Expected**: Both return "yes".
+
+---
+
+## Phase B.8: OLM Bundle Validation
+
+### B.8.1 Verify Bundle Version
+
+```bash
+echo "=== CSV Version ==="
+grep 'name:.*elasticsearch-operator.v' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml | head -1
+grep 'replaces:' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml
+grep '^  version:' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml
+```
+
+**Expected**:
+- [ ] CSV name: `elasticsearch-operator.v0.2.0`
+- [ ] replaces: `elasticsearch-operator.v0.1.0`
+- [ ] version: `0.2.0`
+
+### B.8.2 Verify Master Descriptors
+
+```bash
+grep -E 'master' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml | grep 'path:' | head -5
+```
+
+**Expected**: specDescriptors for master, master.enabled, master.replicas.
+
+### B.8.3 Verify Deployment RBAC in CSV
+
+```bash
+grep -A3 'deployments' bundle/manifests/elasticsearch-operator.clusterserviceversion.yaml | head -5
+```
+
+**Expected**: `apps/deployments` with CRUD verbs.
+
+### B.8.4 Bundle Validate
+
+```bash
+operator-sdk bundle validate bundle/
+```
+
+**Expected**: No errors.
+
+---
+
+## Scenario B Cleanup
+
+```bash
+oc delete elasticsearchcluster --all -n $NAMESPACE
+sleep 15
+
+# If NOT continuing to Scenario C, undeploy:
+# make undeploy                                                        # if deployed with make deploy
+# operator-sdk cleanup elasticsearch-operator --namespace $NAMESPACE    # if deployed with OLM
+# oc delete project $NAMESPACE
+```
+
+---
+
+## Scenario B Summary Checklist
+
+| # | Test | Phase | Expected |
+|---|------|-------|----------|
+| 1 | Operator deploys with v0.2.0 image | B.1 | Pod Running, CRD has master field |
+| 2 | All Scenario A resources work without master | B.2 | 5 resources created |
+| 3 | No master Deployment when not configured | B.2 | Not found |
+| 4 | Master Deployment created when enabled | B.3 | 3 replicas (multi-replica) |
+| 5 | Master Deployment has TWO ports (9200+9300) | B.3 | Both ports present |
+| 6 | Master Deployment has correct owner ref | B.3 | ElasticsearchCluster |
+| 7 | Master Deployment has component=master label | B.3 | Labels correct |
+| 8 | No PVC on master (coordination-only) | B.3 | No volumes |
+| 9 | MasterReady condition True | B.3 | MasterConfigured |
+| 10 | Existing resources unaffected | B.3 | StatefulSet ok |
+| 11 | Master Deployment deleted when disabled | B.4 | Not found |
+| 12 | MasterReady False when disabled | B.4 | MasterDisabled |
+| 13 | Idempotent — no duplicate master resources | B.5 | Exactly 1 each |
+| 14 | All 6 resources cleaned on CR delete | B.6 | Including master |
+| 15 | Deployment RBAC works | B.7 | can-i returns yes |
+| 16 | CSV version 0.2.0 with replaces | B.8 | Correct upgrade path |
+| 17 | Master descriptors in CSV | B.8 | master.* fields present |
+| 18 | Deployment RBAC in CSV | B.8 | apps/deployments |
+| 19 | Bundle validates | B.8 | No errors |

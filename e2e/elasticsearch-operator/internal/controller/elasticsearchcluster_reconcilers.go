@@ -279,6 +279,97 @@ func (r *ElasticsearchClusterReconciler) reconcileStatefulSet(ctx context.Contex
 	return nil
 }
 
+func (r *ElasticsearchClusterReconciler) reconcileMaster(ctx context.Context, cr *searchv1alpha1.ElasticsearchCluster) error {
+	name := fmt.Sprintf("%s-master", cr.Name)
+
+	if cr.Spec.Master == nil || !cr.Spec.Master.Enabled {
+		existing := &appsv1.Deployment{}
+		err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
+		if err == nil {
+			if err := r.Delete(ctx, existing); err != nil {
+				return err
+			}
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "MasterDeleted", fmt.Sprintf("Deleted master Deployment %s", name))
+		} else if !errors.IsNotFound(err) {
+			return err
+		}
+		clearMasterReadyCondition(cr, "MasterDisabled", "Master nodes are not enabled")
+		return nil
+	}
+
+	existing := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cr.Namespace}, existing)
+	if err == nil {
+		updated := false
+		if *existing.Spec.Replicas != cr.Spec.Master.Replicas {
+			existing.Spec.Replicas = &cr.Spec.Master.Replicas
+			updated = true
+		}
+		if !reflect.DeepEqual(existing.Spec.Template.Spec.Containers[0].Resources, cr.Spec.Master.Resources) {
+			existing.Spec.Template.Spec.Containers[0].Resources = cr.Spec.Master.Resources
+			updated = true
+		}
+		if updated {
+			if err := r.Update(ctx, existing); err != nil {
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "MasterUpdateFailed", fmt.Sprintf("Failed to update master: %v", err))
+				return err
+			}
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "MasterUpdated", fmt.Sprintf("Updated master Deployment %s", name))
+		}
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	replicas := cr.Spec.Master.Replicas
+	masterLabels := map[string]string{
+		"app.kubernetes.io/name":       "elasticsearch",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/managed-by": "elasticsearch-operator",
+		"app.kubernetes.io/part-of":    cr.Name,
+		"app.kubernetes.io/component":  "master",
+	}
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: cr.Namespace, Labels: masterLabels,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: masterLabels},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: masterLabels},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:    "master",
+							Image:   "registry.access.redhat.com/ubi9/ubi-micro:latest",
+							Command: []string{"/bin/sleep", "infinity"},
+							Ports: []corev1.ContainerPort{
+								{Name: "http", ContainerPort: 9200, Protocol: corev1.ProtocolTCP},
+								{Name: "transport", ContainerPort: 9300, Protocol: corev1.ProtocolTCP},
+							},
+							Resources: cr.Spec.Master.Resources,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cr, deployment, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.Create(ctx, deployment); err != nil {
+		r.Recorder.Event(cr, corev1.EventTypeWarning, "MasterFailed", fmt.Sprintf("Failed to create master Deployment: %v", err))
+		return err
+	}
+	r.Recorder.Event(cr, corev1.EventTypeNormal, "MasterCreated", fmt.Sprintf("Created master Deployment %s", name))
+	setMasterReadyCondition(cr, "MasterConfigured", "Master Deployment is running")
+	return nil
+}
+
 func (r *ElasticsearchClusterReconciler) reconcileBackupCronJob(ctx context.Context, cr *searchv1alpha1.ElasticsearchCluster) error {
 	if cr.Spec.Backup == nil || !cr.Spec.Backup.Enabled {
 		clearBackupReadyCondition(cr, "BackupDisabled", "Backup is not enabled")

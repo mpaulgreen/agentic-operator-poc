@@ -48,6 +48,10 @@ type ElasticsearchClusterSpec struct {
 	// Backup defines the optional snapshot backup configuration.
 	// +optional
 	Backup *BackupSpec `json:"backup,omitempty"`
+
+	// Master defines the optional dedicated master node configuration.
+	// +optional
+	Master *MasterSpec `json:"master,omitempty"`
 }
 
 // StorageSpec defines storage configuration.
@@ -88,6 +92,23 @@ type BackupSpec struct {
 	// +kubebuilder:validation:Maximum=30
 	// +kubebuilder:default=7
 	RetentionDays int32 `json:"retentionDays,omitempty"`
+}
+
+// MasterSpec defines dedicated master node configuration.
+type MasterSpec struct {
+	// Enabled indicates whether dedicated master nodes are active.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Replicas is the number of master nodes (should be odd for quorum).
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=5
+	// +kubebuilder:default=3
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// Resources defines the CPU and memory resource requirements for master nodes.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // ElasticsearchClusterStatus defines the observed state of ElasticsearchCluster.

@@ -37,6 +37,15 @@ func (in *BackupSpec) DeepCopy() *BackupSpec {
 	out := new(BackupSpec); in.DeepCopyInto(out); return out
 }
 
+func (in *MasterSpec) DeepCopyInto(out *MasterSpec) {
+	*out = *in
+	in.Resources.DeepCopyInto(&out.Resources)
+}
+func (in *MasterSpec) DeepCopy() *MasterSpec {
+	if in == nil { return nil }
+	out := new(MasterSpec); in.DeepCopyInto(out); return out
+}
+
 func (in *StorageSpec) DeepCopyInto(out *StorageSpec) {
 	*out = *in
 	if in.StorageClassName != nil {
@@ -98,6 +107,11 @@ func (in *ElasticsearchClusterSpec) DeepCopyInto(out *ElasticsearchClusterSpec) 
 		in, out := &in.Backup, &out.Backup
 		*out = new(BackupSpec)
 		**out = **in
+	}
+	if in.Master != nil {
+		in, out := &in.Master, &out.Master
+		*out = new(MasterSpec)
+		(*in).DeepCopyInto(*out)
 	}
 }
 func (in *ElasticsearchClusterSpec) DeepCopy() *ElasticsearchClusterSpec {

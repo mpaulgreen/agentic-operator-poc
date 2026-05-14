@@ -34,7 +34,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/example/elasticsearch-operator
-  name: elasticsearch-operator.v0.1.0
+  name: elasticsearch-operator.v0.2.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -55,6 +55,8 @@ spec:
       - kind: ConfigMap
         version: v1
       - kind: CronJob
+        version: v1
+      - kind: Deployment
         version: v1
       specDescriptors:
       - path: replicas
@@ -81,6 +83,15 @@ spec:
       - path: backup.retentionDays
         displayName: Retention Days
         description: Number of days to retain snapshots
+      - path: master
+        displayName: Master
+        description: Dedicated master node configuration
+      - path: master.enabled
+        displayName: Master Enabled
+        description: Whether dedicated master nodes are active
+      - path: master.replicas
+        displayName: Master Replicas
+        description: Number of master nodes
       statusDescriptors:
       - path: phase
         displayName: Phase
@@ -201,6 +212,18 @@ spec:
           - update
           - watch
         - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - batch
           resources:
           - cronjobs
@@ -240,7 +263,7 @@ spec:
                 - --leader-elect
                 command:
                 - /manager
-                image: quay.io/mpaulgreen/elasticsearch-operator:v0.1.0
+                image: quay.io/mpaulgreen/elasticsearch-operator:v0.2.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -331,4 +354,5 @@ spec:
   provider:
     name: Example
     url: https://example.com
-  version: 0.1.0
+  replaces: elasticsearch-operator.v0.1.0
+  version: 0.2.0

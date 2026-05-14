@@ -73,3 +73,12 @@ func setBackupReadyCondition(cr *searchv1alpha1.ElasticsearchCluster, reason, me
 func clearBackupReadyCondition(cr *searchv1alpha1.ElasticsearchCluster, reason, message string) {
 	setCondition(cr, ConditionBackupReady, metav1.ConditionFalse, reason, message)
 }
+
+const ConditionMasterReady = "MasterReady"
+
+func setMasterReadyCondition(cr *searchv1alpha1.ElasticsearchCluster, reason, message string) {
+	setCondition(cr, ConditionMasterReady, metav1.ConditionTrue, reason, message)
+}
+func clearMasterReadyCondition(cr *searchv1alpha1.ElasticsearchCluster, reason, message string) {
+	setCondition(cr, ConditionMasterReady, metav1.ConditionFalse, reason, message)
+}

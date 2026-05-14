@@ -55,6 +55,7 @@ type ElasticsearchClusterReconciler struct {
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *ElasticsearchClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -103,6 +104,9 @@ func (r *ElasticsearchClusterReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	if err := r.reconcileStatefulSet(ctx, cr); err != nil {
 		return r.handleError(ctx, cr, "StatefulSetReconcileFailed", err)
+	}
+	if err := r.reconcileMaster(ctx, cr); err != nil {
+		return r.handleError(ctx, cr, "MasterReconcileFailed", err)
 	}
 	if err := r.reconcileBackupCronJob(ctx, cr); err != nil {
 		return r.handleError(ctx, cr, "BackupCronJobReconcileFailed", err)
@@ -162,6 +166,7 @@ func (r *ElasticsearchClusterReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.StatefulSet{}).
+		Owns(&appsv1.Deployment{}).
 		Owns(&batchv1.CronJob{}).
 		Complete(r)
 }

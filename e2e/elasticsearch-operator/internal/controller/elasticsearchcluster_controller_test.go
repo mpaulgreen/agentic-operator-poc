@@ -373,6 +373,80 @@ var _ = Describe("ElasticsearchCluster Controller", func() {
 	})
 
 	// -----------------------------------------------------------------------
+	// reconcileMaster
+	// -----------------------------------------------------------------------
+	Context("When reconciling Master Deployment", func() {
+		It("should create master Deployment when enabled", func() {
+			cr.Spec.Master = &searchv1alpha1.MasterSpec{
+				Enabled:  true,
+				Replicas: 3,
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("250m"),
+						corev1.ResourceMemory: resource.MustParse("512Mi"),
+					},
+				},
+			}
+			Expect(reconciler.reconcileMaster(ctx, cr)).To(Succeed())
+
+			dep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-master", Namespace: nsName}, dep)).To(Succeed())
+			Expect(*dep.Spec.Replicas).To(Equal(int32(3)))
+			Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(dep.Spec.Template.Spec.Containers[0].Ports).To(HaveLen(2))
+			Expect(dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(int32(9200)))
+			Expect(dep.Spec.Template.Spec.Containers[0].Ports[1].ContainerPort).To(Equal(int32(9300)))
+			Expect(dep.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "master"))
+			Expect(dep.OwnerReferences).To(HaveLen(1))
+		})
+
+		It("should not create master when disabled", func() {
+			cr.Spec.Master = nil
+			Expect(reconciler.reconcileMaster(ctx, cr)).To(Succeed())
+
+			dep := &appsv1.Deployment{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-master", Namespace: nsName}, dep)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should be idempotent for master", func() {
+			cr.Spec.Master = &searchv1alpha1.MasterSpec{
+				Enabled:  true,
+				Replicas: 3,
+			}
+			Expect(reconciler.reconcileMaster(ctx, cr)).To(Succeed())
+
+			dep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-master", Namespace: nsName}, dep)).To(Succeed())
+			originalVersion := dep.ResourceVersion
+
+			Expect(reconciler.reconcileMaster(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-master", Namespace: nsName}, dep)).To(Succeed())
+			Expect(dep.ResourceVersion).To(Equal(originalVersion))
+		})
+
+		It("should delete master when disabled", func() {
+			cr.Spec.Master = &searchv1alpha1.MasterSpec{
+				Enabled:  true,
+				Replicas: 3,
+			}
+			Expect(reconciler.reconcileMaster(ctx, cr)).To(Succeed())
+
+			// Verify it was created
+			dep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-master", Namespace: nsName}, dep)).To(Succeed())
+
+			// Disable master
+			cr.Spec.Master.Enabled = false
+			Expect(reconciler.reconcileMaster(ctx, cr)).To(Succeed())
+
+			// Verify it was deleted
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: crName + "-master", Namespace: nsName}, dep)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	// -----------------------------------------------------------------------
 	// Helper functions
 	// -----------------------------------------------------------------------
 	Context("When testing helper functions", func() {
